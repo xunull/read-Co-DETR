@@ -15,6 +15,7 @@ import sys
 import numpy as np
 from mmcv.ops import batched_nms
 from mmdet.core import bbox_mapping_back, merge_aug_proposals
+
 if sys.version_info >= (3, 7):
     from mmdet.utils.contextmanagers import completed
 
@@ -43,7 +44,6 @@ class CoDeformDETRHead(DETRHead):
             transformer['mixed_selection'] = self.mixed_selection
         super(CoDeformDETRHead, self).__init__(
             *args, transformer=transformer, **kwargs)
-
 
     def _init_layers(self):
         """Initialize classification branch and regression branch of head."""
@@ -145,21 +145,21 @@ class CoDeformDETRHead(DETRHead):
 
         hs, init_reference, inter_references, \
             enc_outputs_class, enc_outputs_coord, enc_outputs = self.transformer(
-                    mlvl_feats,
-                    mlvl_masks,
-                    query_embeds,
-                    mlvl_positional_encodings,
-                    reg_branches=self.reg_branches if self.with_box_refine else None,  # noqa:E501
-                    cls_branches=self.cls_branches if self.as_two_stage else None,  # noqa:E501
-                    return_encoder_output=True
-            )
+            mlvl_feats,
+            mlvl_masks,
+            query_embeds,
+            mlvl_positional_encodings,
+            reg_branches=self.reg_branches if self.with_box_refine else None,  # noqa:E501
+            cls_branches=self.cls_branches if self.as_two_stage else None,  # noqa:E501
+            return_encoder_output=True
+        )
 
         outs = []
         num_level = len(mlvl_feats)
         start = 0
         for lvl in range(num_level):
             bs, c, h, w = mlvl_feats[lvl].shape
-            end = start + h*w
+            end = start + h * w
             feat = enc_outputs[start:end].permute(1, 2, 0).contiguous()
             start = end
             outs.append(feat.reshape(bs, c, h, w))
@@ -242,18 +242,18 @@ class CoDeformDETRHead(DETRHead):
 
         query_embeds = None
         hs, init_reference, inter_references = self.transformer.forward_aux(
-                    mlvl_feats,
-                    mlvl_masks,
-                    query_embeds,
-                    mlvl_positional_encodings,
-                    aux_coords,
-                    pos_feats=aux_feats,
-                    reg_branches=self.reg_branches if self.with_box_refine else None,  # noqa:E501
-                    cls_branches=self.cls_branches if self.as_two_stage else None,  # noqa:E501
-                    return_encoder_output=True,
-                    attn_masks=attn_masks,
-                    head_idx=head_idx
-            )
+            mlvl_feats,
+            mlvl_masks,
+            query_embeds,
+            mlvl_positional_encodings,
+            aux_coords,
+            pos_feats=aux_feats,
+            reg_branches=self.reg_branches if self.with_box_refine else None,  # noqa:E501
+            cls_branches=self.cls_branches if self.as_two_stage else None,  # noqa:E501
+            return_encoder_output=True,
+            attn_masks=attn_masks,
+            head_idx=head_idx
+        )
 
         hs = hs.permute(0, 2, 1, 3)
         outputs_classes = []
@@ -280,7 +280,7 @@ class CoDeformDETRHead(DETRHead):
         outputs_coords = torch.stack(outputs_coords)
 
         return outputs_classes, outputs_coords, \
-                None, None
+            None, None
 
     def loss_single_aux(self,
                         cls_scores,
@@ -320,17 +320,17 @@ class CoDeformDETRHead(DETRHead):
             bbox_targets = bbox_targets.reshape(num_imgs * num_q, 4)
             bbox_weights = bbox_weights.reshape(num_imgs * num_q, 4)
         except:
-            return cls_scores.mean()*0, cls_scores.mean()*0, cls_scores.mean()*0
+            return cls_scores.mean() * 0, cls_scores.mean() * 0, cls_scores.mean() * 0
 
         bg_class_ind = self.num_classes
         num_total_pos = len(((labels >= 0) & (labels < bg_class_ind)).nonzero().squeeze(1))
-        num_total_neg = num_imgs*num_q - num_total_pos
+        num_total_neg = num_imgs * num_q - num_total_pos
 
         # classification loss
         cls_scores = cls_scores.reshape(-1, self.cls_out_channels)
         # construct weighted avg_factor to match with the official DETR repo
         cls_avg_factor = num_total_pos * 1.0 + \
-            num_total_neg * self.bg_cls_weight
+                         num_total_neg * self.bg_cls_weight
         if self.sync_cls_avg_factor:
             cls_avg_factor = reduce_mean(
                 cls_scores.new_tensor([cls_avg_factor]))
@@ -349,7 +349,7 @@ class CoDeformDETRHead(DETRHead):
             img_h, img_w, _ = img_meta['img_shape']
             factor = bbox_pred.new_tensor([img_w, img_h, img_w,
                                            img_h]).unsqueeze(0).repeat(
-                                               bbox_pred.size(0), 1)
+                bbox_pred.size(0), 1)
             factors.append(factor)
         factors = torch.cat(factors, 0)
 
@@ -367,7 +367,7 @@ class CoDeformDETRHead(DETRHead):
         # regression L1 loss
         loss_bbox = self.loss_bbox(
             bbox_preds, bbox_targets, bbox_weights, avg_factor=num_total_pos)
-        return loss_cls*self.lambda_1, loss_bbox*self.lambda_1, loss_iou*self.lambda_1
+        return loss_cls * self.lambda_1, loss_bbox * self.lambda_1, loss_iou * self.lambda_1
 
     def get_aux_targets(self, pos_coords, img_metas, mlvl_feats, head_idx):
         coords, labels, targets = pos_coords[:3]
@@ -381,7 +381,7 @@ class CoDeformDETRHead(DETRHead):
             feats = torch.cat(feats, dim=0)
             bg_class_ind = self.num_classes
             pos_inds = ((label >= 0)
-                        & (label < bg_class_ind)).nonzero().squeeze(1)  
+                        & (label < bg_class_ind)).nonzero().squeeze(1)
             max_num_coords = max(max_num_coords, len(pos_inds))
             all_feats.append(feats)
         max_num_coords = min(self.max_pos_coords, max_num_coords)
@@ -406,11 +406,11 @@ class CoDeformDETRHead(DETRHead):
             else:
                 num_coords_per_point = coord.shape[0] // feats.shape[0]
             feats = feats.unsqueeze(1).repeat(1, num_coords_per_point, 1)
-            feats = feats.reshape(feats.shape[0]*num_coords_per_point, feats.shape[-1])
+            feats = feats.reshape(feats.shape[0] * num_coords_per_point, feats.shape[-1])
             img_meta = img_metas[i]
             img_h, img_w, _ = img_meta['img_shape']
             factor = coord.new_tensor([img_w, img_h, img_w,
-                                           img_h]).unsqueeze(0)
+                                       img_h]).unsqueeze(0)
             bg_class_ind = self.num_classes
             pos_inds = ((label >= 0)
                         & (label < bg_class_ind)).nonzero().squeeze(1)
@@ -427,19 +427,19 @@ class CoDeformDETRHead(DETRHead):
             if self.use_zero_padding:
                 label_weights[i][:len(label)] = 1
                 bbox_weights[i][:len(label)] = 1
-                attn_mask = torch.zeros([max_num_coords, max_num_coords,]).bool().to(coord.device)
+                attn_mask = torch.zeros([max_num_coords, max_num_coords, ]).bool().to(coord.device)
             else:
                 bbox_weights[i][:len(label)] = 1
 
             if coord.shape[0] < max_num_coords:
-                padding_shape = max_num_coords-coord.shape[0]
+                padding_shape = max_num_coords - coord.shape[0]
                 if self.use_zero_padding:
                     padding_coord = coord.new_zeros([padding_shape, 4])
                     padding_label = label.new_ones([padding_shape]) * self.num_classes
                     padding_target = target.new_zeros([padding_shape, 4])
                     padding_feat = feat.new_zeros([padding_shape, c])
-                    attn_mask[coord.shape[0] :, 0 : coord.shape[0],] = True
-                    attn_mask[:, coord.shape[0] :,] = True
+                    attn_mask[coord.shape[0]:, 0: coord.shape[0], ] = True
+                    attn_mask[:, coord.shape[0]:, ] = True
                 else:
                     indices = torch.randperm(neg_inds.shape[0])[:padding_shape].cuda()
                     neg_inds = neg_inds[indices]
@@ -460,7 +460,7 @@ class CoDeformDETRHead(DETRHead):
 
         if self.use_zero_padding:
             attn_masks = torch.cat(attn_masks, dim=0).unsqueeze(1).repeat(1, 8, 1, 1)
-            attn_masks = attn_masks.reshape(bs*8, max_num_coords, max_num_coords)
+            attn_masks = attn_masks.reshape(bs * 8, max_num_coords, max_num_coords)
         else:
             attn_mask = None
 
@@ -516,10 +516,10 @@ class CoDeformDETRHead(DETRHead):
                  all_bbox_preds,
                  enc_cls_scores,
                  enc_bbox_preds,
-                 aux_coords, 
-                 aux_labels, 
-                 aux_targets, 
-                 aux_label_weights, 
+                 aux_coords,
+                 aux_labels,
+                 aux_targets,
+                 aux_label_weights,
                  aux_bbox_weights,
                  aux_feats,
                  attn_masks,
@@ -572,7 +572,7 @@ class CoDeformDETRHead(DETRHead):
 
         losses_cls, losses_bbox, losses_iou = multi_apply(
             self.loss_single_aux, all_cls_scores, all_bbox_preds,
-            all_labels, all_label_weights, all_bbox_targets, 
+            all_labels, all_label_weights, all_bbox_targets,
             all_bbox_weights, img_metas_list, all_gt_bboxes_ignore_list)
 
         loss_dict = dict()
@@ -770,7 +770,6 @@ class CoDeformDETRHead(DETRHead):
             result_list.append(proposals)
         return result_list
 
-
     def loss_single(self,
                     cls_scores,
                     bbox_preds,
@@ -816,7 +815,7 @@ class CoDeformDETRHead(DETRHead):
         cls_scores = cls_scores.reshape(-1, self.cls_out_channels)
         # construct weighted avg_factor to match with the official DETR repo
         cls_avg_factor = num_total_pos * 1.0 + \
-            num_total_neg * self.bg_cls_weight
+                         num_total_neg * self.bg_cls_weight
         if self.sync_cls_avg_factor:
             cls_avg_factor = reduce_mean(
                 cls_scores.new_tensor([cls_avg_factor]))
@@ -835,7 +834,7 @@ class CoDeformDETRHead(DETRHead):
             img_h, img_w, _ = img_meta['img_shape']
             factor = bbox_pred.new_tensor([img_w, img_h, img_w,
                                            img_h]).unsqueeze(0).repeat(
-                                               bbox_pred.size(0), 1)
+                bbox_pred.size(0), 1)
             factors.append(factor)
         factors = torch.cat(factors, 0)
 
@@ -901,13 +900,13 @@ class CoDeformDETRHead(DETRHead):
         num_imgs = len(cls_scores_list)
         if gt_bboxes_ignore_list is None:
             gt_bboxes_ignore_list = [
-            gt_bboxes_ignore_list for _ in range(num_imgs)
+                gt_bboxes_ignore_list for _ in range(num_imgs)
             ]
 
         (labels_list, label_weights_list, bbox_targets_list,
          bbox_weights_list, pos_inds_list, neg_inds_list) = multi_apply(
-             self._get_target_single, cls_scores_list, bbox_preds_list,
-             gt_bboxes_list, gt_labels_list, img_metas, gt_bboxes_ignore_list)
+            self._get_target_single, cls_scores_list, bbox_preds_list,
+            gt_bboxes_list, gt_labels_list, img_metas, gt_bboxes_ignore_list)
         num_total_pos = sum((inds.numel() for inds in pos_inds_list))
         num_total_neg = sum((inds.numel() for inds in neg_inds_list))
         return (labels_list, label_weights_list, bbox_targets_list,
@@ -954,15 +953,15 @@ class CoDeformDETRHead(DETRHead):
         gt_bboxes_ignore = None
         # assigner and sampler
         assign_result = self.assigner.assign(bbox_pred, cls_score, gt_bboxes,
-                                            gt_labels, img_meta,
-                                            gt_bboxes_ignore)
+                                             gt_labels, img_meta,
+                                             gt_bboxes_ignore)
         sampling_result = self.sampler.sample(assign_result, bbox_pred,
                                               gt_bboxes)
         pos_inds = sampling_result.pos_inds
         neg_inds = sampling_result.neg_inds
 
         # label targets
-        labels = gt_bboxes.new_full((num_bboxes, ),
+        labels = gt_bboxes.new_full((num_bboxes,),
                                     self.num_classes,
                                     dtype=torch.long)
         labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]

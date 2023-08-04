@@ -40,14 +40,16 @@ class CoDETR(BaseDetector):
             self.neck = build_neck(neck)
 
         if query_head is not None:
-            query_head.update(train_cfg=train_cfg[head_idx] if (train_cfg is not None and train_cfg[head_idx] is not None) else None)
+            query_head.update(
+                train_cfg=train_cfg[head_idx] if (train_cfg is not None and train_cfg[head_idx] is not None) else None)
             query_head.update(test_cfg=test_cfg[head_idx])
             self.query_head = build_head(query_head)
             self.query_head.init_weights()
             head_idx += 1
 
         if rpn_head is not None:
-            rpn_train_cfg = train_cfg[head_idx].rpn if (train_cfg is not None and train_cfg[head_idx] is not None) else None
+            rpn_train_cfg = train_cfg[head_idx].rpn if (
+                        train_cfg is not None and train_cfg[head_idx] is not None) else None
             rpn_head_ = rpn_head.copy()
             rpn_head_.update(train_cfg=rpn_train_cfg, test_cfg=test_cfg[head_idx].rpn)
             self.rpn_head = build_head(rpn_head_)
@@ -56,19 +58,21 @@ class CoDETR(BaseDetector):
         self.roi_head = nn.ModuleList()
         for i in range(len(roi_head)):
             if roi_head[i]:
-                rcnn_train_cfg = train_cfg[i+head_idx].rcnn if (train_cfg and train_cfg[i+head_idx] is not None) else None
+                rcnn_train_cfg = train_cfg[i + head_idx].rcnn if (
+                            train_cfg and train_cfg[i + head_idx] is not None) else None
                 roi_head[i].update(train_cfg=rcnn_train_cfg)
-                roi_head[i].update(test_cfg=test_cfg[i+head_idx].rcnn)
+                roi_head[i].update(test_cfg=test_cfg[i + head_idx].rcnn)
                 self.roi_head.append(build_head(roi_head[i]))
                 self.roi_head[-1].init_weights()
 
         self.bbox_head = nn.ModuleList()
         for i in range(len(bbox_head)):
             if bbox_head[i]:
-                bbox_head[i].update(train_cfg=train_cfg[i+head_idx+len(self.roi_head)] if (train_cfg and train_cfg[i+head_idx+len(self.roi_head)] is not None) else None)
-                bbox_head[i].update(test_cfg=test_cfg[i+head_idx+len(self.roi_head)])
-                self.bbox_head.append(build_head(bbox_head[i]))  
-                self.bbox_head[-1].init_weights() 
+                bbox_head[i].update(train_cfg=train_cfg[i + head_idx + len(self.roi_head)] if (
+                            train_cfg and train_cfg[i + head_idx + len(self.roi_head)] is not None) else None)
+                bbox_head[i].update(test_cfg=test_cfg[i + head_idx + len(self.roi_head)])
+                self.bbox_head.append(build_head(bbox_head[i]))
+                self.bbox_head[-1].init_weights()
 
         self.head_idx = head_idx
         self.train_cfg = train_cfg
@@ -87,7 +91,7 @@ class CoDETR(BaseDetector):
     @property
     def with_roi_head(self):
         """bool: whether the detector has a RoI head"""
-        return hasattr(self, 'roi_head') and self.roi_head is not None and len(self.roi_head)>0
+        return hasattr(self, 'roi_head') and self.roi_head is not None and len(self.roi_head) > 0
 
     @property
     def with_shared_head(self):
@@ -97,8 +101,8 @@ class CoDETR(BaseDetector):
     @property
     def with_bbox(self):
         """bool: whether the detector has a bbox head"""
-        return ((hasattr(self, 'roi_head') and self.roi_head is not None and len(self.roi_head)>0)
-                or (hasattr(self, 'bbox_head') and self.bbox_head is not None and len(self.bbox_head)>0))
+        return ((hasattr(self, 'roi_head') and self.roi_head is not None and len(self.roi_head) > 0)
+                or (hasattr(self, 'bbox_head') and self.bbox_head is not None and len(self.bbox_head) > 0))
 
     def extract_feat(self, img, img_metas=None):
         """Directly extract features from the backbone+neck."""
@@ -157,7 +161,7 @@ class CoDETR(BaseDetector):
         for img_meta in img_metas:
             img_meta['batch_input_shape'] = batch_input_shape
 
-        if not self.with_attn_mask: # remove attn mask for LSJ
+        if not self.with_attn_mask:  # remove attn mask for LSJ
             for i in range(len(img_metas)):
                 input_img_h, input_img_w = img_metas[i]['batch_input_shape']
                 img_metas[i]['img_shape'] = [input_img_h, input_img_w, 3]
@@ -165,26 +169,27 @@ class CoDETR(BaseDetector):
         x = self.extract_feat(img, img_metas)
 
         losses = dict()
+
         def upd_loss(losses, idx, weight=1):
             new_losses = dict()
-            for k,v in losses.items():
-                new_k = '{}{}'.format(k,idx)
-                if isinstance(v,list) or isinstance(v,tuple):
-                    new_losses[new_k] = [i*weight for i in v]
-                else:new_losses[new_k] = v*weight
+            for k, v in losses.items():
+                new_k = '{}{}'.format(k, idx)
+                if isinstance(v, list) or isinstance(v, tuple):
+                    new_losses[new_k] = [i * weight for i in v]
+                else:
+                    new_losses[new_k] = v * weight
             return new_losses
 
         # DETR encoder and decoder forward
         if self.with_query_head:
             bbox_losses, x = self.query_head.forward_train(x, img_metas, gt_bboxes,
-                                                          gt_labels, gt_bboxes_ignore)
+                                                           gt_labels, gt_bboxes_ignore)
             losses.update(bbox_losses)
-            
 
         # RPN forward and loss
         if self.with_rpn:
             proposal_cfg = self.train_cfg[self.head_idx].get('rpn_proposal',
-                                              self.test_cfg[self.head_idx].rpn)
+                                                             self.test_cfg[self.head_idx].rpn)
             rpn_losses, proposal_list = self.rpn_head.forward_train(
                 x,
                 img_metas,
@@ -200,38 +205,37 @@ class CoDETR(BaseDetector):
         positive_coords = []
         for i in range(len(self.roi_head)):
             roi_losses = self.roi_head[i].forward_train(x, img_metas, proposal_list,
-                                                    gt_bboxes, gt_labels,
-                                                    gt_bboxes_ignore, gt_masks,
-                                                    **kwargs)
+                                                        gt_bboxes, gt_labels,
+                                                        gt_bboxes_ignore, gt_masks,
+                                                        **kwargs)
             if self.with_pos_coord:
                 positive_coords.append(roi_losses.pop('pos_coords'))
-            else: 
+            else:
                 if 'pos_coords' in roi_losses.keys():
-                    tmp = roi_losses.pop('pos_coords')     
+                    tmp = roi_losses.pop('pos_coords')
             roi_losses = upd_loss(roi_losses, idx=i)
             losses.update(roi_losses)
-            
+
         for i in range(len(self.bbox_head)):
             bbox_losses = self.bbox_head[i].forward_train(x, img_metas, gt_bboxes,
-                                                        gt_labels, gt_bboxes_ignore)
+                                                          gt_labels, gt_bboxes_ignore)
             if self.with_pos_coord:
                 pos_coords = bbox_losses.pop('pos_coords')
                 positive_coords.append(pos_coords)
             else:
                 if 'pos_coords' in bbox_losses.keys():
-                    tmp = bbox_losses.pop('pos_coords')          
-            bbox_losses = upd_loss(bbox_losses, idx=i+len(self.roi_head))
+                    tmp = bbox_losses.pop('pos_coords')
+            bbox_losses = upd_loss(bbox_losses, idx=i + len(self.roi_head))
             losses.update(bbox_losses)
 
-        if self.with_pos_coord and len(positive_coords)>0:
+        if self.with_pos_coord and len(positive_coords) > 0:
             for i in range(len(positive_coords)):
                 bbox_losses = self.query_head.forward_train_aux(x, img_metas, gt_bboxes,
-                                                            gt_labels, gt_bboxes_ignore, positive_coords[i], i)
+                                                                gt_labels, gt_bboxes_ignore, positive_coords[i], i)
                 bbox_losses = upd_loss(bbox_losses, idx=i)
-                losses.update(bbox_losses)                    
+                losses.update(bbox_losses)
 
         return losses
-
 
     def simple_test_roi_head(self, img, img_metas, proposals=None, rescale=False):
         """Test without augmentation."""
@@ -240,7 +244,7 @@ class CoDETR(BaseDetector):
         batch_input_shape = tuple(img[0].size()[-2:])
         for img_meta in img_metas:
             img_meta['batch_input_shape'] = batch_input_shape
-        if not self.with_attn_mask: # remove attn mask for LSJ
+        if not self.with_attn_mask:  # remove attn mask for LSJ
             for i in range(len(img_metas)):
                 input_img_h, input_img_w = img_metas[i]['batch_input_shape']
                 img_metas[i]['img_shape'] = [input_img_h, input_img_w, 3]
@@ -275,7 +279,7 @@ class CoDETR(BaseDetector):
         batch_input_shape = tuple(img[0].size()[-2:])
         for img_meta in img_metas:
             img_meta['batch_input_shape'] = batch_input_shape
-        if not self.with_attn_mask: # remove attn mask for LSJ
+        if not self.with_attn_mask:  # remove attn mask for LSJ
             for i in range(len(img_metas)):
                 input_img_h, input_img_w = img_metas[i]['batch_input_shape']
                 img_metas[i]['img_shape'] = [input_img_h, input_img_w, 3]
@@ -306,7 +310,7 @@ class CoDETR(BaseDetector):
         batch_input_shape = tuple(img[0].size()[-2:])
         for img_meta in img_metas:
             img_meta['batch_input_shape'] = batch_input_shape
-        if not self.with_attn_mask: # remove attn mask for LSJ
+        if not self.with_attn_mask:  # remove attn mask for LSJ
             for i in range(len(img_metas)):
                 input_img_h, input_img_w = img_metas[i]['batch_input_shape']
                 img_metas[i]['img_shape'] = [input_img_h, input_img_w, 3]
@@ -326,9 +330,9 @@ class CoDETR(BaseDetector):
     def simple_test(self, img, img_metas, proposals=None, rescale=False):
         """Test without augmentation."""
         assert self.eval_module in ['detr', 'one-stage', 'two-stage']
-        if self.with_bbox and self.eval_module=='one-stage':
+        if self.with_bbox and self.eval_module == 'one-stage':
             return self.simple_test_query_head(img, img_metas, proposals, rescale)
-        if self.with_roi_head and self.eval_module=='two-stage':
+        if self.with_roi_head and self.eval_module == 'two-stage':
             return self.simple_test_roi_head(img, img_metas, proposals, rescale)
         return self.simple_test_query_head(img, img_metas, proposals, rescale)
 

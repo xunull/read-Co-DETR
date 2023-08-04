@@ -59,7 +59,6 @@ class CoATSSHead(AnchorHead):
             self.sampler = build_sampler(sampler_cfg, context=self)
         self.loss_centerness = build_loss(loss_centerness)
 
-
     def _init_layers(self):
         """Initialize layers of the head."""
         self.relu = nn.ReLU(inplace=True)
@@ -272,18 +271,18 @@ class CoATSSHead(AnchorHead):
                          device=device)).item()
         num_total_samples = max(num_total_samples, 1.0)
         new_img_metas = [img_metas for _ in range(len(anchor_list))]
-        losses_cls, losses_bbox, loss_centerness,\
+        losses_cls, losses_bbox, loss_centerness, \
             bbox_avg_factor = multi_apply(
-                self.loss_single,
-                anchor_list,
-                cls_scores,
-                bbox_preds,
-                centernesses,
-                labels_list,
-                label_weights_list,
-                bbox_targets_list,
-                new_img_metas,
-                num_total_samples=num_total_samples)
+            self.loss_single,
+            anchor_list,
+            cls_scores,
+            bbox_preds,
+            centernesses,
+            labels_list,
+            label_weights_list,
+            bbox_targets_list,
+            new_img_metas,
+            num_total_samples=num_total_samples)
 
         bbox_avg_factor = sum(bbox_avg_factor)
         bbox_avg_factor = reduce_mean(bbox_avg_factor).clamp_(min=1).item()
@@ -348,16 +347,16 @@ class CoATSSHead(AnchorHead):
             gt_labels_list = [None for _ in range(num_imgs)]
         (all_anchors, all_labels, all_label_weights, all_bbox_targets,
          all_bbox_weights, pos_inds_list, neg_inds_list) = multi_apply(
-             self._get_target_single,
-             anchor_list,
-             valid_flag_list,
-             num_level_anchors_list,
-             gt_bboxes_list,
-             gt_bboxes_ignore_list,
-             gt_labels_list,
-             img_metas,
-             label_channels=label_channels,
-             unmap_outputs=unmap_outputs)
+            self._get_target_single,
+            anchor_list,
+            valid_flag_list,
+            num_level_anchors_list,
+            gt_bboxes_list,
+            gt_bboxes_ignore_list,
+            gt_labels_list,
+            img_metas,
+            label_channels=label_channels,
+            unmap_outputs=unmap_outputs)
         # no valid anchors
         if any([labels is None for labels in all_labels]):
             return None
@@ -430,7 +429,7 @@ class CoATSSHead(AnchorHead):
                                            img_meta['img_shape'][:2],
                                            self.train_cfg.allowed_border)
         if not inside_flags.any():
-            return (None, ) * 7
+            return (None,) * 7
         # assign gt and sample anchors
         anchors = flat_anchors[inside_flags, :]
 
@@ -446,7 +445,7 @@ class CoATSSHead(AnchorHead):
         num_valid_anchors = anchors.shape[0]
         bbox_targets = torch.zeros_like(anchors)
         bbox_weights = torch.zeros_like(anchors)
-        labels = anchors.new_full((num_valid_anchors, ),
+        labels = anchors.new_full((num_valid_anchors,),
                                   self.num_classes,
                                   dtype=torch.long)
         label_weights = anchors.new_zeros(num_valid_anchors, dtype=torch.float)

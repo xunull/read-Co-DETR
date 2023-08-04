@@ -83,11 +83,11 @@ class CoDeformableDetrTransformerDecoder(TransformerLayerSequence):
         for lid, layer in enumerate(self.layers):
             if reference_points.shape[-1] == 4:
                 reference_points_input = reference_points[:, :, None] * \
-                    torch.cat([valid_ratios, valid_ratios], -1)[:, None]
+                                         torch.cat([valid_ratios, valid_ratios], -1)[:, None]
             else:
                 assert reference_points.shape[-1] == 2
                 reference_points_input = reference_points[:, :, None] * \
-                    valid_ratios[:, None]
+                                         valid_ratios[:, None]
             output = layer(
                 output,
                 *args,
@@ -105,7 +105,7 @@ class CoDeformableDetrTransformerDecoder(TransformerLayerSequence):
                     assert reference_points.shape[-1] == 2
                     new_reference_points = tmp
                     new_reference_points[..., :2] = tmp[
-                        ..., :2] + inverse_sigmoid(reference_points)
+                                                    ..., :2] + inverse_sigmoid(reference_points)
                     new_reference_points = new_reference_points.sigmoid()
                 reference_points = new_reference_points.detach()
 
@@ -162,8 +162,8 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
                 self.pos_feats_trans = nn.ModuleList()
                 self.pos_feats_norm = nn.ModuleList()
                 for i in range(self.num_co_heads):
-                    self.aux_pos_trans.append(nn.Linear(self.embed_dims*2, self.embed_dims*2))
-                    self.aux_pos_trans_norm.append(nn.LayerNorm(self.embed_dims*2))
+                    self.aux_pos_trans.append(nn.Linear(self.embed_dims * 2, self.embed_dims * 2))
+                    self.aux_pos_trans_norm.append(nn.LayerNorm(self.embed_dims * 2))
                     if self.with_coord_feat:
                         self.pos_feats_trans.append(nn.Linear(self.embed_dims, self.embed_dims))
                         self.pos_feats_norm.append(nn.LayerNorm(self.embed_dims))
@@ -177,7 +177,7 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
         scale = 2 * math.pi
         dim_t = torch.arange(
             num_pos_feats, dtype=torch.float32, device=proposals.device)
-        dim_t = temperature**(2 * (dim_t // 2) / num_pos_feats)
+        dim_t = temperature ** (2 * (dim_t // 2) / num_pos_feats)
         # N, L, 4
         proposals = proposals.sigmoid() * scale
         # N, L, 4, 128
@@ -269,7 +269,7 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
         spatial_shapes = torch.as_tensor(
             spatial_shapes, dtype=torch.long, device=feat_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros(
-            (1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
+            (1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack(
             [self.get_valid_ratio(m) for m in mlvl_masks], 1)
 
@@ -352,11 +352,11 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
         inter_references_out = inter_references
         if self.as_two_stage:
             if return_encoder_output:
-                return inter_states, init_reference_out,\
-                    inter_references_out, enc_outputs_class,\
-                    enc_outputs_coord_unact, memory                
-            return inter_states, init_reference_out,\
-                inter_references_out, enc_outputs_class,\
+                return inter_states, init_reference_out, \
+                    inter_references_out, enc_outputs_class, \
+                    enc_outputs_coord_unact, memory
+            return inter_states, init_reference_out, \
+                inter_references_out, enc_outputs_class, \
                 enc_outputs_coord_unact
         if return_encoder_output:
             return inter_states, init_reference_out, \
@@ -394,12 +394,12 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
         spatial_shapes = torch.as_tensor(
             spatial_shapes, dtype=torch.long, device=feat_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros(
-            (1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
+            (1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack(
             [self.get_valid_ratio(m) for m in mlvl_masks], 1)
 
         feat_flatten = feat_flatten.permute(1, 0, 2)  # (H*W, bs, embed_dims)
-        
+
         memory = feat_flatten
         memory = memory.permute(1, 0, 2)
         bs, _, c = memory.shape
@@ -454,6 +454,7 @@ def build_MLP(input_dim, hidden_dim, output_dim, num_layers):
     layers.append(nn.Linear(hidden_dim, output_dim))
     return nn.Sequential(*layers)
 
+
 @TRANSFORMER_LAYER_SEQUENCE.register_module()
 class DinoTransformerDecoder(DeformableDetrTransformerDecoder):
 
@@ -473,7 +474,7 @@ class DinoTransformerDecoder(DeformableDetrTransformerDecoder):
         scale = 2 * math.pi
         dim_t = torch.arange(
             pos_feat, dtype=torch.float32, device=pos_tensor.device)
-        dim_t = 10000**(2 * (dim_t // 2) / pos_feat)
+        dim_t = 10000 ** (2 * (dim_t // 2) / pos_feat)
         x_embed = pos_tensor[:, :, 0] * scale
         y_embed = pos_tensor[:, :, 1] * scale
         pos_x = x_embed[:, :, None] / dim_t
@@ -524,7 +525,7 @@ class DinoTransformerDecoder(DeformableDetrTransformerDecoder):
                     reference_points[:, :, None] * valid_ratios[:, None]
 
             query_sine_embed = self.gen_sineembed_for_position(
-                reference_points_input[:, :, 0, :], self.embed_dims//2)
+                reference_points_input[:, :, 0, :], self.embed_dims // 2)
             query_pos = self.ref_point_head(query_sine_embed)
 
             query_pos = query_pos.permute(1, 0, 2)
@@ -558,6 +559,7 @@ class DinoTransformerDecoder(DeformableDetrTransformerDecoder):
 
         return output, reference_points
 
+
 @TRANSFORMER.register_module()
 class CoDinoTransformer(CoDeformableDetrTransformer):
 
@@ -572,7 +574,7 @@ class CoDinoTransformer(CoDeformableDetrTransformer):
         self.enc_output_norm = nn.LayerNorm(self.embed_dims)
         self.query_embed = nn.Embedding(self.two_stage_num_proposals,
                                         self.embed_dims)
-    
+
     def _init_layers(self):
         if self.with_pos_coord:
             if self.num_co_heads > 0:
@@ -581,7 +583,7 @@ class CoDinoTransformer(CoDeformableDetrTransformer):
                 self.pos_feats_trans = nn.ModuleList()
                 self.pos_feats_norm = nn.ModuleList()
                 for i in range(self.num_co_heads):
-                    self.aux_pos_trans.append(nn.Linear(self.embed_dims*2, self.embed_dims))
+                    self.aux_pos_trans.append(nn.Linear(self.embed_dims * 2, self.embed_dims))
                     self.aux_pos_trans_norm.append(nn.LayerNorm(self.embed_dims))
                     if self.with_coord_feat:
                         self.pos_feats_trans.append(nn.Linear(self.embed_dims, self.embed_dims))
@@ -627,7 +629,7 @@ class CoDinoTransformer(CoDeformableDetrTransformer):
         spatial_shapes = torch.as_tensor(
             spatial_shapes, dtype=torch.long, device=feat_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros(
-            (1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
+            (1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack(
             [self.get_valid_ratio(m) for m in mlvl_masks], 1)
 
@@ -704,7 +706,6 @@ class CoDinoTransformer(CoDeformableDetrTransformer):
 
         return inter_states, inter_references_out, topk_score, topk_anchor, memory
 
-
     def forward_aux(self,
                     mlvl_feats,
                     mlvl_masks,
@@ -735,14 +736,14 @@ class CoDinoTransformer(CoDeformableDetrTransformer):
         spatial_shapes = torch.as_tensor(
             spatial_shapes, dtype=torch.long, device=feat_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros(
-            (1, )), spatial_shapes.prod(1).cumsum(0)[:-1]))
+            (1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack(
             [self.get_valid_ratio(m) for m in mlvl_masks], 1)
 
         feat_flatten = feat_flatten.permute(1, 0, 2)  # (H*W, bs, embed_dims)
-        
+
         memory = feat_flatten
-            #enc_inter = [feat.permute(1, 2, 0) for feat in enc_inter]
+        # enc_inter = [feat.permute(1, 2, 0) for feat in enc_inter]
         memory = memory.permute(1, 0, 2)
         bs, _, c = memory.shape
 

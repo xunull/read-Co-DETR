@@ -46,7 +46,7 @@ class CoStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         if self.with_mask:
             mask_rois = rois[:100]
             mask_results = self._mask_forward(x, mask_rois)
-            outs = outs + (mask_results['mask_pred'], )
+            outs = outs + (mask_results['mask_pred'],)
         return outs
 
     def forward_train(self,
@@ -108,18 +108,18 @@ class CoStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             num_imgs = len(img_metas)
             max_proposal = 2000
             for res in sampling_results:
-                max_proposal =  min(max_proposal, res.bboxes.shape[0])
+                max_proposal = min(max_proposal, res.bboxes.shape[0])
             ori_coords = bbox2roi([res.bboxes for res in sampling_results])
             ori_proposals, ori_labels, ori_bbox_targets, ori_bbox_feats = [], [], [], []
             for i in range(num_imgs):
-                idx = (ori_coords[:,0]==i).nonzero().squeeze(1)
+                idx = (ori_coords[:, 0] == i).nonzero().squeeze(1)
                 idx = idx[:max_proposal]
                 ori_proposal = ori_coords[idx][:, 1:].unsqueeze(0)
                 ori_label = bbox_targets[0][idx].unsqueeze(0)
                 ori_bbox_target = bbox_targets[2][idx].unsqueeze(0)
                 ori_bbox_feat = bbox_results['bbox_feats'].mean(-1).mean(-1)
                 ori_bbox_feat = ori_bbox_feat[idx].unsqueeze(0)
-                ori_proposals.append(ori_proposal) 
+                ori_proposals.append(ori_proposal)
                 ori_labels.append(ori_label)
                 ori_bbox_targets.append(ori_bbox_target)
                 ori_bbox_feats.append(ori_bbox_feat)
@@ -355,7 +355,7 @@ class CoStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         det_bboxes = det_bboxes[..., :4]
         batch_index = torch.arange(
             det_bboxes.size(0), device=det_bboxes.device).float().view(
-                -1, 1, 1).expand(det_bboxes.size(0), det_bboxes.size(1), 1)
+            -1, 1, 1).expand(det_bboxes.size(0), det_bboxes.size(1), 1)
         mask_rois = torch.cat([batch_index, det_bboxes], dim=-1)
         mask_rois = mask_rois.view(-1, 5)
         mask_results = self._mask_forward(x, mask_rois)
@@ -396,7 +396,7 @@ class CoStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
 
         batch_index = torch.arange(
             rois.size(0), device=rois.device).float().view(-1, 1, 1).expand(
-                rois.size(0), rois.size(1), 1)
+            rois.size(0), rois.size(1), 1)
 
         rois = torch.cat([batch_index, rois[..., :4]], dim=-1)
         batch_size = rois.shape[0]

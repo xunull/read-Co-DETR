@@ -186,15 +186,15 @@ class DnQueryGenerator:
         for i in range(num_groups):
             if i == 0:
                 attn_mask[single_pad * 2 * i:single_pad * 2 * (i + 1),
-                          single_pad * 2 * (i + 1):pad_size] = True
+                single_pad * 2 * (i + 1):pad_size] = True
             if i == num_groups - 1:
                 attn_mask[single_pad * 2 * i:single_pad * 2 *
-                          (i + 1), :single_pad * i * 2] = True
+                                             (i + 1), :single_pad * i * 2] = True
             else:
                 attn_mask[single_pad * 2 * i:single_pad * 2 * (i + 1),
-                          single_pad * 2 * (i + 1):pad_size] = True
+                single_pad * 2 * (i + 1):pad_size] = True
                 attn_mask[single_pad * 2 * i:single_pad * 2 *
-                          (i + 1), :single_pad * 2 * i] = True
+                                             (i + 1), :single_pad * 2 * i] = True
 
         dn_meta = {
             'pad_size': pad_size,

@@ -11,6 +11,7 @@ from mmcv.ops import batched_nms
 from projects.models import CoDeformDETRHead
 from projects.models.query_denoising import build_dn_generator
 
+
 @HEADS.register_module()
 class CoDINOHead(CoDeformDETRHead):
 
@@ -49,7 +50,7 @@ class CoDINOHead(CoDeformDETRHead):
             nn.Conv2d(self.embed_dims, self.embed_dims, kernel_size=3, stride=2, padding=1),
             nn.GroupNorm(32, self.embed_dims)
         )
-        
+
     def init_denoising(self, dn_cfg):
         if dn_cfg is not None:
             dn_cfg['num_classes'] = self.num_classes
@@ -120,7 +121,7 @@ class CoDINOHead(CoDeformDETRHead):
         start = 0
         for lvl in range(num_level):
             bs, c, h, w = mlvl_feats[lvl].shape
-            end = start + h*w
+            end = start + h * w
             feat = enc_outputs[start:end].permute(1, 2, 0).contiguous()
             start = end
             outs.append(feat.reshape(bs, c, h, w))
@@ -161,7 +162,7 @@ class CoDINOHead(CoDeformDETRHead):
              all_bbox_preds,
              enc_topk_scores,
              enc_topk_anchors,
-             enc_outputs, 
+             enc_outputs,
              gt_bboxes_list,
              gt_labels_list,
              img_metas,
@@ -306,7 +307,7 @@ class CoDINOHead(CoDeformDETRHead):
             img_h, img_w, _ = img_meta['img_shape']
             factor = bbox_pred.new_tensor([img_w, img_h, img_w,
                                            img_h]).unsqueeze(0).repeat(
-                                               bbox_pred.size(0), 1)
+                bbox_pred.size(0), 1)
             factors.append(factor)
         factors = torch.cat(factors, 0)
 
@@ -358,7 +359,7 @@ class CoDINOHead(CoDeformDETRHead):
         neg_inds = pos_inds + single_pad // 2
 
         # label targets
-        labels = gt_bboxes.new_full((num_bboxes, ),
+        labels = gt_bboxes.new_full((num_bboxes,),
                                     self.num_classes,
                                     dtype=torch.long)
         labels[pos_inds] = gt_labels[pos_assigned_gt_inds]
@@ -386,9 +387,9 @@ class CoDINOHead(CoDeformDETRHead):
     def extract_dn_outputs(all_cls_scores, all_bbox_preds, dn_meta):
         if dn_meta is not None:
             denoising_cls_scores = all_cls_scores[:, :, :
-                                                  dn_meta['pad_size'], :]
+                                                        dn_meta['pad_size'], :]
             denoising_bbox_preds = all_bbox_preds[:, :, :
-                                                  dn_meta['pad_size'], :]
+                                                        dn_meta['pad_size'], :]
             matching_cls_scores = all_cls_scores[:, :, dn_meta['pad_size']:, :]
             matching_bbox_preds = all_bbox_preds[:, :, dn_meta['pad_size']:, :]
         else:
@@ -444,18 +445,18 @@ class CoDINOHead(CoDeformDETRHead):
 
         query_embeds = None
         hs, inter_references = self.transformer.forward_aux(
-                    mlvl_feats,
-                    mlvl_masks,
-                    query_embeds,
-                    mlvl_positional_encodings,
-                    aux_coords,
-                    pos_feats=aux_feats,
-                    reg_branches=self.reg_branches if self.with_box_refine else None,  # noqa:E501
-                    cls_branches=self.cls_branches if self.as_two_stage else None,  # noqa:E501
-                    return_encoder_output=True,
-                    attn_masks=attn_masks,
-                    head_idx=head_idx
-            )
+            mlvl_feats,
+            mlvl_masks,
+            query_embeds,
+            mlvl_positional_encodings,
+            aux_coords,
+            pos_feats=aux_feats,
+            reg_branches=self.reg_branches if self.with_box_refine else None,  # noqa:E501
+            cls_branches=self.cls_branches if self.as_two_stage else None,  # noqa:E501
+            return_encoder_output=True,
+            attn_masks=attn_masks,
+            head_idx=head_idx
+        )
 
         hs = hs.permute(0, 2, 1, 3)
         outputs_classes = []
@@ -479,7 +480,7 @@ class CoDINOHead(CoDeformDETRHead):
         outputs_coords = torch.stack(outputs_coords)
 
         return outputs_classes, outputs_coords, \
-                None, None
+            None, None
 
     def loss_single(self,
                     cls_scores,
@@ -526,7 +527,7 @@ class CoDINOHead(CoDeformDETRHead):
         cls_scores = cls_scores.reshape(-1, self.cls_out_channels)
         # construct weighted avg_factor to match with the official DETR repo
         cls_avg_factor = num_total_pos * 1.0 + \
-            num_total_neg * self.bg_cls_weight
+                         num_total_neg * self.bg_cls_weight
         if self.sync_cls_avg_factor:
             cls_avg_factor = reduce_mean(
                 cls_scores.new_tensor([cls_avg_factor]))
@@ -560,7 +561,7 @@ class CoDINOHead(CoDeformDETRHead):
             img_h, img_w, _ = img_meta['img_shape']
             factor = bbox_pred.new_tensor([img_w, img_h, img_w,
                                            img_h]).unsqueeze(0).repeat(
-                                               bbox_pred.size(0), 1)
+                bbox_pred.size(0), 1)
             factors.append(factor)
         factors = torch.cat(factors, 0)
 
@@ -618,17 +619,17 @@ class CoDINOHead(CoDeformDETRHead):
             bbox_targets = bbox_targets.reshape(num_imgs * num_q, 4)
             bbox_weights = bbox_weights.reshape(num_imgs * num_q, 4)
         except:
-            return cls_scores.mean()*0, cls_scores.mean()*0, cls_scores.mean()*0
+            return cls_scores.mean() * 0, cls_scores.mean() * 0, cls_scores.mean() * 0
 
         bg_class_ind = self.num_classes
         num_total_pos = len(((labels >= 0) & (labels < bg_class_ind)).nonzero().squeeze(1))
-        num_total_neg = num_imgs*num_q - num_total_pos
+        num_total_neg = num_imgs * num_q - num_total_pos
 
         # classification loss
         cls_scores = cls_scores.reshape(-1, self.cls_out_channels)
         # construct weighted avg_factor to match with the official DETR repo
         cls_avg_factor = num_total_pos * 1.0 + \
-            num_total_neg * self.bg_cls_weight
+                         num_total_neg * self.bg_cls_weight
         if self.sync_cls_avg_factor:
             cls_avg_factor = reduce_mean(
                 cls_scores.new_tensor([cls_avg_factor]))
@@ -662,7 +663,7 @@ class CoDINOHead(CoDeformDETRHead):
             img_h, img_w, _ = img_meta['img_shape']
             factor = bbox_pred.new_tensor([img_w, img_h, img_w,
                                            img_h]).unsqueeze(0).repeat(
-                                               bbox_pred.size(0), 1)
+                bbox_pred.size(0), 1)
             factors.append(factor)
         factors = torch.cat(factors, 0)
 
@@ -680,4 +681,4 @@ class CoDINOHead(CoDeformDETRHead):
         # regression L1 loss
         loss_bbox = self.loss_bbox(
             bbox_preds, bbox_targets, bbox_weights, avg_factor=num_total_pos)
-        return loss_cls*self.lambda_1, loss_bbox*self.lambda_1, loss_iou*self.lambda_1
+        return loss_cls * self.lambda_1, loss_bbox * self.lambda_1, loss_iou * self.lambda_1
