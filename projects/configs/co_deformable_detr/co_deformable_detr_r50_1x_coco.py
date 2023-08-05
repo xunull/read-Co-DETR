@@ -17,7 +17,8 @@ model = dict(
         norm_cfg=dict(type='BN', requires_grad=False),
         norm_eval=True,
         style='pytorch',
-        init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet50')),
+        # init_cfg=dict(type='Pretrained', checkpoint='torchvision://resnet50')
+    ),
     neck=dict(
         type='ChannelMapper',
         in_channels=[512, 1024, 2048],
