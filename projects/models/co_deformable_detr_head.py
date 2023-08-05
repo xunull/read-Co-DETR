@@ -47,6 +47,7 @@ class CoDeformDETRHead(DETRHead):
 
     def _init_layers(self):
         """Initialize classification branch and regression branch of head."""
+        # 下采用做什么的，为了迎合rpn的头？
         self.downsample = nn.Sequential(
             nn.Conv2d(self.embed_dims, self.embed_dims, kernel_size=3, stride=2, padding=1),
             nn.GroupNorm(32, self.embed_dims)
@@ -128,8 +129,8 @@ class CoDeformDETRHead(DETRHead):
             (batch_size, input_img_h, input_img_w))
         for img_id in range(batch_size):
             img_h, img_w, _ = img_metas[img_id]['img_shape']
-            img_masks[img_id, :img_h, :img_w] = 0
-
+            img_masks[img_id, :img_h, :img_w] = 0 # 制作mask，默认为1，图像区域填入0
+        # 多尺度的mask, 以及位置编码
         mlvl_masks = []
         mlvl_positional_encodings = []
         for feat in mlvl_feats:
@@ -143,6 +144,7 @@ class CoDeformDETRHead(DETRHead):
         if not self.as_two_stage or self.mixed_selection:
             query_embeds = self.query_embedding.weight
 
+        # 经过transformer
         hs, init_reference, inter_references, \
             enc_outputs_class, enc_outputs_coord, enc_outputs = self.transformer(
             mlvl_feats,
@@ -153,22 +155,23 @@ class CoDeformDETRHead(DETRHead):
             cls_branches=self.cls_branches if self.as_two_stage else None,  # noqa:E501
             return_encoder_output=True
         )
-
+        # list([bs,256,h,w])
         outs = []
         num_level = len(mlvl_feats)
         start = 0
         for lvl in range(num_level):
             bs, c, h, w = mlvl_feats[lvl].shape
             end = start + h * w
-            feat = enc_outputs[start:end].permute(1, 2, 0).contiguous()
+            feat = enc_outputs[start:end].permute(1, 2, 0).contiguous() # 取出某一层层的encoder输出的token（feature）[bs,256,hw]
             start = end
             outs.append(feat.reshape(bs, c, h, w))
-        outs.append(self.downsample(outs[-1]))
-
+        outs.append(self.downsample(outs[-1])) # 正常的detr只用4层，这里在多了一层
+        # [6,300,bs,256] -> [6,bs,300,256]
         hs = hs.permute(0, 2, 1, 3)
         outputs_classes = []
         outputs_coords = []
 
+        # 输出的bbox的修正
         for lvl in range(hs.shape[0]):
             if lvl == 0:
                 reference = init_reference
@@ -185,7 +188,7 @@ class CoDeformDETRHead(DETRHead):
             outputs_coord = tmp.sigmoid()
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
-
+        # 最后的decoder的那些结果
         outputs_classes = torch.stack(outputs_classes)
         outputs_coords = torch.stack(outputs_coords)
 
@@ -621,11 +624,13 @@ class CoDeformDETRHead(DETRHead):
             dict[str, Tensor]: A dictionary of loss components.
         """
         assert proposal_cfg is None, '"proposal_cfg" must be None'
+        # 调用forward方法
         outs = self(x, img_metas)
         if gt_labels is None:
             loss_inputs = outs + (gt_bboxes, img_metas)
         else:
             loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
+        # 计算loss
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
         enc_outputs = outs[-1]
         return losses, enc_outputs

@@ -29,7 +29,7 @@ class CoDETR(BaseDetector):
         self.with_pos_coord = with_pos_coord
         self.with_attn_mask = with_attn_mask
         # Module for evaluation, ['detr', 'one-stage', 'two-stage']
-        self.eval_module = eval_module
+        self.eval_module = eval_module # todo detr是什么意思
         # Module index for evaluation
         self.eval_index = eval_index
         self.backbone = build_backbone(backbone)
@@ -43,33 +43,33 @@ class CoDETR(BaseDetector):
             query_head.update(
                 train_cfg=train_cfg[head_idx] if (train_cfg is not None and train_cfg[head_idx] is not None) else None)
             query_head.update(test_cfg=test_cfg[head_idx])
-            self.query_head = build_head(query_head)
+            self.query_head = build_head(query_head) # CoDeformDETRHead
             self.query_head.init_weights()
             head_idx += 1
 
         if rpn_head is not None:
             rpn_train_cfg = train_cfg[head_idx].rpn if (
-                        train_cfg is not None and train_cfg[head_idx] is not None) else None
+                    train_cfg is not None and train_cfg[head_idx] is not None) else None
             rpn_head_ = rpn_head.copy()
             rpn_head_.update(train_cfg=rpn_train_cfg, test_cfg=test_cfg[head_idx].rpn)
-            self.rpn_head = build_head(rpn_head_)
+            self.rpn_head = build_head(rpn_head_) # RPNHead
             self.rpn_head.init_weights()
-
+        # CoStandardRoIHead
         self.roi_head = nn.ModuleList()
         for i in range(len(roi_head)):
             if roi_head[i]:
                 rcnn_train_cfg = train_cfg[i + head_idx].rcnn if (
-                            train_cfg and train_cfg[i + head_idx] is not None) else None
+                        train_cfg and train_cfg[i + head_idx] is not None) else None
                 roi_head[i].update(train_cfg=rcnn_train_cfg)
                 roi_head[i].update(test_cfg=test_cfg[i + head_idx].rcnn)
                 self.roi_head.append(build_head(roi_head[i]))
                 self.roi_head[-1].init_weights()
-
+        # CoATSSHead
         self.bbox_head = nn.ModuleList()
         for i in range(len(bbox_head)):
             if bbox_head[i]:
                 bbox_head[i].update(train_cfg=train_cfg[i + head_idx + len(self.roi_head)] if (
-                            train_cfg and train_cfg[i + head_idx + len(self.roi_head)] is not None) else None)
+                        train_cfg and train_cfg[i + head_idx + len(self.roi_head)] is not None) else None)
                 bbox_head[i].update(test_cfg=test_cfg[i + head_idx + len(self.roi_head)])
                 self.bbox_head.append(build_head(bbox_head[i]))
                 self.bbox_head[-1].init_weights()
@@ -78,6 +78,7 @@ class CoDETR(BaseDetector):
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
 
+    # 是否有rpn，这个rpn应该是针对encoder
     @property
     def with_rpn(self):
         """bool: whether the detector has RPN"""
@@ -104,6 +105,7 @@ class CoDETR(BaseDetector):
         return ((hasattr(self, 'roi_head') and self.roi_head is not None and len(self.roi_head) > 0)
                 or (hasattr(self, 'bbox_head') and self.bbox_head is not None and len(self.bbox_head) > 0))
 
+    # 抽取出特征
     def extract_feat(self, img, img_metas=None):
         """Directly extract features from the backbone+neck."""
         x = self.backbone(img)
@@ -111,6 +113,7 @@ class CoDETR(BaseDetector):
             x = self.neck(x)
         return x
 
+    # todo
     def forward_dummy(self, img):
         """Used for computing network flops.
 
@@ -157,7 +160,7 @@ class CoDETR(BaseDetector):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
-        batch_input_shape = tuple(img[0].size()[-2:])
+        batch_input_shape = tuple(img[0].size()[-2:]) # img [bs,3,h,w] 图像的尺寸
         for img_meta in img_metas:
             img_meta['batch_input_shape'] = batch_input_shape
 
@@ -166,10 +169,11 @@ class CoDETR(BaseDetector):
                 input_img_h, input_img_w = img_metas[i]['batch_input_shape']
                 img_metas[i]['img_shape'] = [input_img_h, input_img_w, 3]
 
+        # 提取特征 (经过backbone, 以及token的变换)
         x = self.extract_feat(img, img_metas)
 
         losses = dict()
-
+        # update loss的方法
         def upd_loss(losses, idx, weight=1):
             new_losses = dict()
             for k, v in losses.items():
@@ -179,7 +183,7 @@ class CoDETR(BaseDetector):
                 else:
                     new_losses[new_k] = v * weight
             return new_losses
-
+        # CoDeformDETRHead
         # DETR encoder and decoder forward
         if self.with_query_head:
             bbox_losses, x = self.query_head.forward_train(x, img_metas, gt_bboxes,

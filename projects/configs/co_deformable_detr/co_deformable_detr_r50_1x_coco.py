@@ -4,6 +4,7 @@ _base_ = [
 ]
 # model settings
 num_dec_layer = 6
+# todo
 lambda_2 = 2.0
 
 model = dict(
@@ -44,6 +45,7 @@ model = dict(
         loss_cls=dict(
             type='CrossEntropyLoss', use_sigmoid=True, loss_weight=1.0 * num_dec_layer * lambda_2),
         loss_bbox=dict(type='L1Loss', loss_weight=1.0 * num_dec_layer * lambda_2)),
+    # DETR的transformer
     query_head=dict(
         type='CoDeformDETRHead',
         num_query=300,
@@ -57,6 +59,7 @@ model = dict(
             type='CoDeformableDetrTransformer',
             num_co_heads=2,
             encoder=dict(
+                # 正常的encoder
                 type='DetrTransformerEncoder',
                 num_layers=6,
                 transformerlayers=dict(

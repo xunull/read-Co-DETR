@@ -32,6 +32,7 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
+# Co-DETR的decoder
 @TRANSFORMER_LAYER_SEQUENCE.register_module()
 class CoDeformableDetrTransformerDecoder(TransformerLayerSequence):
     """Implements the decoder in DETR transformer.
@@ -96,6 +97,7 @@ class CoDeformableDetrTransformerDecoder(TransformerLayerSequence):
             output = output.permute(1, 0, 2)
 
             if reg_branches is not None:
+
                 tmp = reg_branches[lid](output)
                 if reference_points.shape[-1] == 4:
                     new_reference_points = tmp + inverse_sigmoid(
@@ -249,6 +251,7 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
 
         feat_flatten = []
         mask_flatten = []
+        # pos_embed被加到了这里
         lvl_pos_embed_flatten = []
         spatial_shapes = []
         for lvl, (feat, mask, pos_embed) in enumerate(
@@ -256,9 +259,13 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
             bs, c, h, w = feat.shape
             spatial_shape = (h, w)
             spatial_shapes.append(spatial_shape)
+            # [bs,256,h,w] -> [bs,hw,256]
             feat = feat.flatten(2).transpose(1, 2)
+            # [bs,h,w] -> [bs,hw]
             mask = mask.flatten(1)
+            # [bs,256,h,w] -> [bs,hw,256]
             pos_embed = pos_embed.flatten(2).transpose(1, 2)
+            # [bs,hw,256]
             lvl_pos_embed = pos_embed + self.level_embeds[lvl].view(1, 1, -1)
             lvl_pos_embed_flatten.append(lvl_pos_embed)
             feat_flatten.append(feat)
@@ -268,19 +275,23 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
         spatial_shapes = torch.as_tensor(
             spatial_shapes, dtype=torch.long, device=feat_flatten.device)
+        # 各个level的token的起始位置
         level_start_index = torch.cat((spatial_shapes.new_zeros(
             (1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        # 有效的比率，根据mask的01计算，真实的长宽占据batch的长款的比率
         valid_ratios = torch.stack(
             [self.get_valid_ratio(m) for m in mlvl_masks], 1)
-
+        # [bs,sum(hw),4,2]
         reference_points = \
             self.get_reference_points(spatial_shapes,
                                       valid_ratios,
                                       device=feat.device)
-
-        feat_flatten = feat_flatten.permute(1, 0, 2)  # (H*W, bs, embed_dims)
+        # (H*W, bs, embed_dims)
+        feat_flatten = feat_flatten.permute(1, 0, 2)
+        # (H*W, bs, embed_dims)
         lvl_pos_embed_flatten = lvl_pos_embed_flatten.permute(
-            1, 0, 2)  # (H*W, bs, embed_dims)
+            1, 0, 2)
+        # encoder的计算
         memory = self.encoder(
             query=feat_flatten,
             key=None,
@@ -292,29 +303,35 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
             level_start_index=level_start_index,
             valid_ratios=valid_ratios,
             **kwargs)
-
+        # [sum(hw),bs,256] -> [bs,sum(hw),256]
         memory = memory.permute(1, 0, 2)
         bs, _, c = memory.shape
         if self.as_two_stage:
+            # [bs,sum(hw),256]  [bs,sum(hw),4] 这个是memory给出的proposals
             output_memory, output_proposals = \
                 self.gen_encoder_output_proposals(
                     memory, mask_flatten, spatial_shapes)
+            # 经过类别的分类头 [bs,sum(hw),80]
             enc_outputs_class = cls_branches[self.decoder.num_layers](
                 output_memory)
+            # 经过bbox的回归头 [bs,sum(hw),4]
             enc_outputs_coord_unact = \
                 reg_branches[
                     self.decoder.num_layers](output_memory) + output_proposals
 
             topk = self.two_stage_num_proposals
             topk = query_embed.shape[0]
+            # [bs,topk] 这里是对应的id
             topk_proposals = torch.topk(
                 enc_outputs_class[..., 0], topk, dim=1)[1]
+            # [bs,topk,4]
             topk_coords_unact = torch.gather(
                 enc_outputs_coord_unact, 1,
                 topk_proposals.unsqueeze(-1).repeat(1, 1, 4))
             topk_coords_unact = topk_coords_unact.detach()
             reference_points = topk_coords_unact.sigmoid()
             init_reference_out = reference_points
+            # todo [bs,topk,512]
             pos_trans_out = self.pos_trans_norm(
                 self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact)))
 
@@ -335,6 +352,8 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
         query = query.permute(1, 0, 2)
         memory = memory.permute(1, 0, 2)
         query_pos = query_pos.permute(1, 0, 2)
+
+        # 经过decoder
         inter_states, inter_references = self.decoder(
             query=query,
             key=None,
@@ -455,6 +474,7 @@ def build_MLP(input_dim, hidden_dim, output_dim, num_layers):
     return nn.Sequential(*layers)
 
 
+# DINO的decoder
 @TRANSFORMER_LAYER_SEQUENCE.register_module()
 class DinoTransformerDecoder(DeformableDetrTransformerDecoder):
 
@@ -560,6 +580,7 @@ class DinoTransformerDecoder(DeformableDetrTransformerDecoder):
         return output, reference_points
 
 
+# DINO的transformer
 @TRANSFORMER.register_module()
 class CoDinoTransformer(CoDeformableDetrTransformer):
 

@@ -4,6 +4,7 @@ import torch
 from mmdet.core import bbox_xyxy_to_cxcywh
 from .transformer import inverse_sigmoid
 
+# DINO使用的
 
 class DnQueryGenerator:
 
