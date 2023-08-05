@@ -63,7 +63,7 @@ class BaseRoIHead(BaseModule, metaclass=ABCMeta):
     def init_assigner_sampler(self):
         """Initialize assigner and sampler."""
         pass
-
+    # 必须实现的方法
     @abstractmethod
     def forward_train(self,
                       x,

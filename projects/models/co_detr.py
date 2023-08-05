@@ -29,7 +29,7 @@ class CoDETR(BaseDetector):
         self.with_pos_coord = with_pos_coord
         self.with_attn_mask = with_attn_mask
         # Module for evaluation, ['detr', 'one-stage', 'two-stage']
-        self.eval_module = eval_module # todo detr是什么意思
+        self.eval_module = eval_module  # todo detr是什么意思
         # Module index for evaluation
         self.eval_index = eval_index
         self.backbone = build_backbone(backbone)
@@ -43,7 +43,7 @@ class CoDETR(BaseDetector):
             query_head.update(
                 train_cfg=train_cfg[head_idx] if (train_cfg is not None and train_cfg[head_idx] is not None) else None)
             query_head.update(test_cfg=test_cfg[head_idx])
-            self.query_head = build_head(query_head) # CoDeformDETRHead
+            self.query_head = build_head(query_head)  # CoDeformDETRHead
             self.query_head.init_weights()
             head_idx += 1
 
@@ -52,7 +52,7 @@ class CoDETR(BaseDetector):
                     train_cfg is not None and train_cfg[head_idx] is not None) else None
             rpn_head_ = rpn_head.copy()
             rpn_head_.update(train_cfg=rpn_train_cfg, test_cfg=test_cfg[head_idx].rpn)
-            self.rpn_head = build_head(rpn_head_) # RPNHead
+            self.rpn_head = build_head(rpn_head_)  # RPNHead
             self.rpn_head.init_weights()
         # CoStandardRoIHead
         self.roi_head = nn.ModuleList()
@@ -160,7 +160,7 @@ class CoDETR(BaseDetector):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
-        batch_input_shape = tuple(img[0].size()[-2:]) # img [bs,3,h,w] 图像的尺寸
+        batch_input_shape = tuple(img[0].size()[-2:])  # img [bs,3,h,w] 图像的尺寸
         for img_meta in img_metas:
             img_meta['batch_input_shape'] = batch_input_shape
 
@@ -173,6 +173,7 @@ class CoDETR(BaseDetector):
         x = self.extract_feat(img, img_metas)
 
         losses = dict()
+
         # update loss的方法
         def upd_loss(losses, idx, weight=1):
             new_losses = dict()
@@ -183,17 +184,33 @@ class CoDETR(BaseDetector):
                 else:
                     new_losses[new_k] = v * weight
             return new_losses
-        # CoDeformDETRHead
+
+        # CoDeformDETRHead 这个就是正常的DETR的transformer的过程
         # DETR encoder and decoder forward
         if self.with_query_head:
+            # bbox_losses 是decoder最后一层的loss，encoder的loss，以及decoder其他层的loss
+            # x是encoder的输出还原到了特征图的形式
             bbox_losses, x = self.query_head.forward_train(x, img_metas, gt_bboxes,
                                                            gt_labels, gt_bboxes_ignore)
             losses.update(bbox_losses)
 
         # RPN forward and loss
         if self.with_rpn:
-            proposal_cfg = self.train_cfg[self.head_idx].get('rpn_proposal',
-                                                             self.test_cfg[self.head_idx].rpn)
+            # {'nms_pre': 4000, 'max_per_img': 1000, 'nms': {'type': 'nms', 'iou_threshold': 0.7}, 'min_bbox_size': 0}
+            proposal_cfg = self.train_cfg[self.head_idx].get('rpn_proposal', self.test_cfg[self.head_idx].rpn)
+            # RPNHead(
+            #   (loss_cls): CrossEntropyLoss(avg_non_ignore=False)
+            #   (loss_bbox): L1Loss()
+            #   (rpn_conv): Conv2d(256, 256, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+            #   (rpn_cls): Conv2d(256, 9, kernel_size=(1, 1), stride=(1, 1))
+            #   (rpn_reg): Conv2d(256, 36, kernel_size=(1, 1), stride=(1, 1))
+            # )
+            # init_cfg={'type': 'Normal', 'layer': 'Conv2d', 'std': 0.01}
+
+
+
+            # proposal_list list [1000,5] ,list为bs， 1000个nms之后的结果，5是四个坐标值，以及前景的分数值
+            # 返回的是rpn阶段的loss, 以及rpn后给出的proposals
             rpn_losses, proposal_list = self.rpn_head.forward_train(
                 x,
                 img_metas,
@@ -202,41 +219,56 @@ class CoDETR(BaseDetector):
                 gt_bboxes_ignore=gt_bboxes_ignore,
                 proposal_cfg=proposal_cfg,
                 **kwargs)
+
             losses.update(rpn_losses)
         else:
             proposal_list = proposals
 
         positive_coords = []
+        # roi_head CoStandardRoIHead
         for i in range(len(self.roi_head)):
+            # loss_cls, acc, loss_bbox, pos_coords
             roi_losses = self.roi_head[i].forward_train(x, img_metas, proposal_list,
                                                         gt_bboxes, gt_labels,
                                                         gt_bboxes_ignore, gt_masks,
                                                         **kwargs)
+            # todo
             if self.with_pos_coord:
+
                 positive_coords.append(roi_losses.pop('pos_coords'))
             else:
+
                 if 'pos_coords' in roi_losses.keys():
                     tmp = roi_losses.pop('pos_coords')
+            # upd_loss 会在loss的key后面补上idx
             roi_losses = upd_loss(roi_losses, idx=i)
             losses.update(roi_losses)
-
+        # CoATSSHead
         for i in range(len(self.bbox_head)):
+            # 这个不需要proposal 四个内容 loss_cls, loss_bbox, loss_centerness, pos_coords
             bbox_losses = self.bbox_head[i].forward_train(x, img_metas, gt_bboxes,
                                                           gt_labels, gt_bboxes_ignore)
+
             if self.with_pos_coord:
+
                 pos_coords = bbox_losses.pop('pos_coords')
                 positive_coords.append(pos_coords)
             else:
+
                 if 'pos_coords' in bbox_losses.keys():
                     tmp = bbox_losses.pop('pos_coords')
+
             bbox_losses = upd_loss(bbox_losses, idx=i + len(self.roi_head))
             losses.update(bbox_losses)
 
         if self.with_pos_coord and len(positive_coords) > 0:
             for i in range(len(positive_coords)):
+                # 这个还是CoDeformDETRHead，还是那个transformer，上面也调用过一个了，这里调用的是 forward_train_aux 方法，不再是forward_train了
                 bbox_losses = self.query_head.forward_train_aux(x, img_metas, gt_bboxes,
                                                                 gt_labels, gt_bboxes_ignore, positive_coords[i], i)
+
                 bbox_losses = upd_loss(bbox_losses, idx=i)
+
                 losses.update(bbox_losses)
 
         return losses

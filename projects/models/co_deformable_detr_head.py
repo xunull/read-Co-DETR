@@ -129,7 +129,7 @@ class CoDeformDETRHead(DETRHead):
             (batch_size, input_img_h, input_img_w))
         for img_id in range(batch_size):
             img_h, img_w, _ = img_metas[img_id]['img_shape']
-            img_masks[img_id, :img_h, :img_w] = 0 # 制作mask，默认为1，图像区域填入0
+            img_masks[img_id, :img_h, :img_w] = 0  # 制作mask，默认为1，图像区域填入0
         # 多尺度的mask, 以及位置编码
         mlvl_masks = []
         mlvl_positional_encodings = []
@@ -162,10 +162,10 @@ class CoDeformDETRHead(DETRHead):
         for lvl in range(num_level):
             bs, c, h, w = mlvl_feats[lvl].shape
             end = start + h * w
-            feat = enc_outputs[start:end].permute(1, 2, 0).contiguous() # 取出某一层层的encoder输出的token（feature）[bs,256,hw]
+            feat = enc_outputs[start:end].permute(1, 2, 0).contiguous()  # 取出某一层层的encoder输出的token（feature）[bs,256,hw]
             start = end
             outs.append(feat.reshape(bs, c, h, w))
-        outs.append(self.downsample(outs[-1])) # 正常的detr只用4层，这里在多了一层
+        outs.append(self.downsample(outs[-1]))  # 正常的detr只用4层，这里在多了一层
         # [6,300,bs,256] -> [6,bs,300,256]
         hs = hs.permute(0, 2, 1, 3)
         outputs_classes = []
@@ -226,7 +226,7 @@ class CoDeformDETRHead(DETRHead):
                 `None` would be returned.
         """
         aux_coords, aux_labels, aux_targets, aux_label_weights, aux_bbox_weights, aux_feats, attn_masks = aux_targets
-        batch_size = mlvl_feats[0].size(0)
+        batch_size = mlvl_feats[0].size(0) # bs
         input_img_h, input_img_w = img_metas[0]['batch_input_shape']
         img_masks = mlvl_feats[0].new_ones(
             (batch_size, input_img_h, input_img_w))
@@ -242,7 +242,7 @@ class CoDeformDETRHead(DETRHead):
                               size=feat.shape[-2:]).to(torch.bool).squeeze(0))
             mlvl_positional_encodings.append(
                 self.positional_encoding(mlvl_masks[-1]))
-
+        # 以上的处理与正常的处理类似
         query_embeds = None
         hs, init_reference, inter_references = self.transformer.forward_aux(
             mlvl_feats,
@@ -261,7 +261,7 @@ class CoDeformDETRHead(DETRHead):
         hs = hs.permute(0, 2, 1, 3)
         outputs_classes = []
         outputs_coords = []
-
+        # bbox值修正
         for lvl in range(hs.shape[0]):
             if lvl == 0:
                 reference = init_reference
@@ -373,21 +373,21 @@ class CoDeformDETRHead(DETRHead):
         return loss_cls * self.lambda_1, loss_bbox * self.lambda_1, loss_iou * self.lambda_1
 
     def get_aux_targets(self, pos_coords, img_metas, mlvl_feats, head_idx):
-        coords, labels, targets = pos_coords[:3]
+        coords, labels, targets = pos_coords[:3] # 得到的坐标，label，类似于gt
         head_name = pos_coords[-1]
         bs, c = len(coords), mlvl_feats[0].shape[1]
         max_num_coords = 0
         all_feats = []
         for i in range(bs):
             label = labels[i]
-            feats = [feat[i].reshape(c, -1).transpose(1, 0) for feat in mlvl_feats]
+            feats = [feat[i].reshape(c, -1).transpose(1, 0) for feat in mlvl_feats] # 一张图像上5个特征层的
             feats = torch.cat(feats, dim=0)
             bg_class_ind = self.num_classes
             pos_inds = ((label >= 0)
-                        & (label < bg_class_ind)).nonzero().squeeze(1)
+                        & (label < bg_class_ind)).nonzero().squeeze(1) # 正样本的index
             max_num_coords = max(max_num_coords, len(pos_inds))
             all_feats.append(feats)
-        max_num_coords = min(self.max_pos_coords, max_num_coords)
+        max_num_coords = min(self.max_pos_coords, max_num_coords) # 最大的匹配的正样本的数量
         max_num_coords = max(9, max_num_coords)
 
         if self.use_zero_padding:
@@ -404,7 +404,7 @@ class CoDeformDETRHead(DETRHead):
             coord, label, target = coords[i], labels[i], targets[i]
             feats = all_feats[i]
             if 'rcnn' in head_name:
-                feats = pos_coords[-2][i]
+                feats = pos_coords[-2][i] # todo
                 num_coords_per_point = 1
             else:
                 num_coords_per_point = coord.shape[0] // feats.shape[0]
@@ -421,7 +421,7 @@ class CoDeformDETRHead(DETRHead):
             if pos_inds.shape[0] > max_num_coords:
                 indices = torch.randperm(pos_inds.shape[0])[:max_num_coords].cuda()
                 pos_inds = pos_inds[indices]
-
+            # 坐标变成相对值
             coord = bbox_xyxy_to_cxcywh(coord[pos_inds] / factor)
             label = label[pos_inds]
             target = bbox_xyxy_to_cxcywh(target[pos_inds] / factor)
@@ -474,7 +474,7 @@ class CoDeformDETRHead(DETRHead):
         aux_label_weights = label_weights
         aux_bbox_weights = bbox_weights
         return (aux_coords, aux_labels, aux_targets, aux_label_weights, aux_bbox_weights, aux_feats, attn_masks)
-
+    # co_detr中被调用，
     # over-write because img_metas are needed as inputs for bbox_head.
     def forward_train_aux(self,
                           x,
@@ -502,13 +502,14 @@ class CoDeformDETRHead(DETRHead):
 
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
-        """
+        """ # aux_coords, aux_labels, aux_targets, aux_label_weights, aux_bbox_weights, aux_feats, attn_masks
         aux_targets = self.get_aux_targets(pos_coords, img_metas, x, head_idx)
-        outs = self.forward_aux(x[:-1], img_metas, aux_targets, head_idx)
+        outs = self.forward_aux(x[:-1], img_metas, aux_targets, head_idx) # x[:-1] 这里的x还是5个，多了一个，多的那个是给rpn以及roi和atss使用的
         outs = outs + aux_targets
         if gt_labels is None:
             loss_inputs = outs + (gt_bboxes, img_metas)
         else:
+
             loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
         losses = self.loss_aux(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
         return losses
@@ -624,7 +625,7 @@ class CoDeformDETRHead(DETRHead):
             dict[str, Tensor]: A dictionary of loss components.
         """
         assert proposal_cfg is None, '"proposal_cfg" must be None'
-        # 调用forward方法
+        # 调用forward方法, 其实就是调用了DETR的transformer部分
         outs = self(x, img_metas)
         if gt_labels is None:
             loss_inputs = outs + (gt_bboxes, img_metas)
@@ -632,6 +633,7 @@ class CoDeformDETRHead(DETRHead):
             loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
         # 计算loss
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+        # encoder的输出
         enc_outputs = outs[-1]
         return losses, enc_outputs
 
@@ -651,18 +653,18 @@ class CoDeformDETRHead(DETRHead):
         Args:
             all_cls_scores (Tensor): Classification score of all
                 decoder layers, has shape
-                [nb_dec, bs, num_query, cls_out_channels].
+                [nb_dec, bs, num_query, cls_out_channels]. # decoder经过class head后的 [6,bs,300,80]
             all_bbox_preds (Tensor): Sigmoid regression
                 outputs of all decode layers. Each is a 4D-tensor with
                 normalized coordinate format (cx, cy, w, h) and shape
-                [nb_dec, bs, num_query, 4].
+                [nb_dec, bs, num_query, 4].  # decoder经过reg head [6,bs,300,4]
             enc_cls_scores (Tensor): Classification scores of
                 points on encode feature map , has shape
                 (N, h*w, num_classes). Only be passed when as_two_stage is
-                True, otherwise is None.
+                True, otherwise is None.  [bs,sum(hw),80]
             enc_bbox_preds (Tensor): Regression results of each points
                 on the encode feature map, has shape (N, h*w, 4). Only be
-                passed when as_two_stage is True, otherwise is None.
+                passed when as_two_stage is True, otherwise is None. [bs,sum(hw),4]
             gt_bboxes_list (list[Tensor]): Ground truth bboxes for each image
                 with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
             gt_labels_list (list[Tensor]): Ground truth class indices for each
@@ -680,46 +682,61 @@ class CoDeformDETRHead(DETRHead):
         #     f'for gt_bboxes_ignore setting to None.'
 
         num_dec_layers = len(all_cls_scores)
+        # 复制6份
         all_gt_bboxes_list = [gt_bboxes_list for _ in range(num_dec_layers)]
+        # 复制6份
         all_gt_labels_list = [gt_labels_list for _ in range(num_dec_layers)]
+        # 复制6份
         all_gt_bboxes_ignore_list = [
             gt_bboxes_ignore for _ in range(num_dec_layers)
         ]
+        # 复制6份
         img_metas_list = [img_metas for _ in range(num_dec_layers)]
 
+
+        # 对decoder的结果进行loss计算
+        # loss_single 对这些6份的list, zip调用的意思
         losses_cls, losses_bbox, losses_iou = multi_apply(
             self.loss_single, all_cls_scores, all_bbox_preds,
             all_gt_bboxes_list, all_gt_labels_list, img_metas_list,
             all_gt_bboxes_ignore_list)
 
         loss_dict = dict()
+
         # loss of proposal generated from encode feature map.
         if enc_cls_scores is not None:
-            binary_labels_list = [
-                torch.zeros_like(gt_labels_list[i])
-                for i in range(len(img_metas))
-            ]
+            # 与label等长的 为0的tensor
+            binary_labels_list = [torch.zeros_like(gt_labels_list[i]) for i in range(len(img_metas))]
+
+            # 因为encoder的输出只有一层，因此这里不需要调用multi_apply
             enc_loss_cls, enc_losses_bbox, enc_losses_iou = \
                 self.loss_single(enc_cls_scores, enc_bbox_preds,
-                                 gt_bboxes_list, binary_labels_list,
+                                 gt_bboxes_list, binary_labels_list,  # encoder这里不需要知道gt的类别信息，为0即可
                                  img_metas, gt_bboxes_ignore)
+
+            # 三个encoder的loss输出结果放入loss_dict 字典
             loss_dict['enc_loss_cls'] = enc_loss_cls
             loss_dict['enc_loss_bbox'] = enc_losses_bbox
             loss_dict['enc_loss_iou'] = enc_losses_iou
 
+        # decoder的最后一层的loss
         # loss from the last decoder layer
         loss_dict['loss_cls'] = losses_cls[-1]
         loss_dict['loss_bbox'] = losses_bbox[-1]
         loss_dict['loss_iou'] = losses_iou[-1]
+
         # loss from other decoder layers
         num_dec_layer = 0
+        # decoder其他层的输出结果的loss
         for loss_cls_i, loss_bbox_i, loss_iou_i in zip(losses_cls[:-1],
                                                        losses_bbox[:-1],
                                                        losses_iou[:-1]):
             loss_dict[f'd{num_dec_layer}.loss_cls'] = loss_cls_i
             loss_dict[f'd{num_dec_layer}.loss_bbox'] = loss_bbox_i
             loss_dict[f'd{num_dec_layer}.loss_iou'] = loss_iou_i
+
             num_dec_layer += 1
+
         return loss_dict
 
     @force_fp32(apply_to=('all_cls_scores_list', 'all_bbox_preds_list'))
@@ -803,30 +820,30 @@ class CoDeformDETRHead(DETRHead):
             dict[str, Tensor]: A dictionary of loss components for outputs from
                 a single decoder layer.
         """
-        num_imgs = cls_scores.size(0)
-        cls_scores_list = [cls_scores[i] for i in range(num_imgs)]
-        bbox_preds_list = [bbox_preds[i] for i in range(num_imgs)]
+        num_imgs = cls_scores.size(0)  # bs
+        cls_scores_list = [cls_scores[i] for i in range(num_imgs)]  # 按图像拆开
+        bbox_preds_list = [bbox_preds[i] for i in range(num_imgs)]  # 按图像拆开
         cls_reg_targets = self.get_targets(cls_scores_list, bbox_preds_list,
                                            gt_bboxes_list, gt_labels_list,
-                                           img_metas, gt_bboxes_ignore_list)
+                                           img_metas, gt_bboxes_ignore_list)  # 匈牙利匹配的相关结果
         (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
          num_total_pos, num_total_neg) = cls_reg_targets
-        labels = torch.cat(labels_list, 0)
+        labels = torch.cat(labels_list, 0)  # bs的所有cat到一起
         label_weights = torch.cat(label_weights_list, 0)
         bbox_targets = torch.cat(bbox_targets_list, 0)
         bbox_weights = torch.cat(bbox_weights_list, 0)
 
         # classification loss
-        cls_scores = cls_scores.reshape(-1, self.cls_out_channels)
+        cls_scores = cls_scores.reshape(-1, self.cls_out_channels)  # 前面的维度捏到一起，最后80
         # construct weighted avg_factor to match with the official DETR repo
         cls_avg_factor = num_total_pos * 1.0 + \
                          num_total_neg * self.bg_cls_weight
         if self.sync_cls_avg_factor:
             cls_avg_factor = reduce_mean(
-                cls_scores.new_tensor([cls_avg_factor]))
+                cls_scores.new_tensor([cls_avg_factor]))  # 多卡训练
         cls_avg_factor = max(cls_avg_factor, 1)
         loss_cls = self.loss_cls(
-            cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
+            cls_scores, labels, label_weights, avg_factor=cls_avg_factor)  # 分类的loss
 
         # Compute the average number of gt boxes across all gpus, for
         # normalization purposes
@@ -849,11 +866,11 @@ class CoDeformDETRHead(DETRHead):
         bbox_preds = bbox_preds.reshape(-1, 4)
         bboxes = bbox_cxcywh_to_xyxy(bbox_preds) * factors
         bboxes_gt = bbox_cxcywh_to_xyxy(bbox_targets) * factors
-
+        # 计算iou loss
         # regression IoU loss, defaultly GIoU loss
         loss_iou = self.loss_iou(
             bboxes, bboxes_gt, bbox_weights, avg_factor=num_total_pos)
-
+        # 计算L1 loss
         # regression L1 loss
         loss_bbox = self.loss_bbox(
             bbox_preds, bbox_targets, bbox_weights, avg_factor=num_total_pos)
@@ -902,7 +919,7 @@ class CoDeformDETRHead(DETRHead):
         """
         # assert gt_bboxes_ignore_list is None, \
         #     'Only supports for gt_bboxes_ignore setting to None.'
-        num_imgs = len(cls_scores_list)
+        num_imgs = len(cls_scores_list)  # bs
         if gt_bboxes_ignore_list is None:
             gt_bboxes_ignore_list = [
                 gt_bboxes_ignore_list for _ in range(num_imgs)
@@ -952,30 +969,30 @@ class CoDeformDETRHead(DETRHead):
                 - pos_inds (Tensor): Sampled positive indices for each image.
                 - neg_inds (Tensor): Sampled negative indices for each image.
         """
-
+        # 经过前面的 6层的multi_apply bs的multi_apply 这里已经是对单个图片进行的调用了
         num_bboxes = bbox_pred.size(0)
         ori_gt_bboxes_ignore = gt_bboxes_ignore
         gt_bboxes_ignore = None
-        # assigner and sampler
+        # assigner and sampler   assigner is HungarianAssigner GT和proposal的匹配结果
         assign_result = self.assigner.assign(bbox_pred, cls_score, gt_bboxes,
                                              gt_labels, img_meta,
                                              gt_bboxes_ignore)
         sampling_result = self.sampler.sample(assign_result, bbox_pred,
                                               gt_bboxes)
-        pos_inds = sampling_result.pos_inds
-        neg_inds = sampling_result.neg_inds
+        pos_inds = sampling_result.pos_inds  # 与GT匹配的id
+        neg_inds = sampling_result.neg_inds  # 剩余作为负样本的id
 
-        # label targets
+        # label targets  全为80
         labels = gt_bboxes.new_full((num_bboxes,),
                                     self.num_classes,
                                     dtype=torch.long)
-        labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]
+        labels[pos_inds] = gt_labels[sampling_result.pos_assigned_gt_inds]  # 填上匹配上的GT的label
         label_weights = gt_bboxes.new_ones(num_bboxes)
 
         # bbox targets
         bbox_targets = torch.zeros_like(bbox_pred)
         bbox_weights = torch.zeros_like(bbox_pred)
-        bbox_weights[pos_inds] = 1.0
+        bbox_weights[pos_inds] = 1.0  # label在loss中都进行计算，box只有匹配上的才会进行计算，因此其他都是0
         img_h, img_w, _ = img_meta['img_shape']
 
         # DETR regress the relative position of boxes (cxcywh) in the image.

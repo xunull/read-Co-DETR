@@ -327,17 +327,22 @@ class BaseDenseHead(BaseModule, metaclass=ABCMeta):
                 losses: (dict[str, Tensor]): A dictionary of loss components.
                 proposal_list (list[Tensor]): Proposals of each image.
         """
+        # 这个方法是forward_train, forward_train这里会调用forward，子类会实现forward方法，子类也会实现loss方法
+
         outs = self(x)
         if gt_labels is None:
             loss_inputs = outs + (gt_bboxes, img_metas)
         else:
             loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+
         if proposal_cfg is None:
             return losses
         else:
             proposal_list = self.get_bboxes(
                 *outs, img_metas=img_metas, cfg=proposal_cfg)
+
+            # 返回loss, 以及proposal信息
             return losses, proposal_list
 
     def simple_test(self, feats, img_metas, rescale=False):

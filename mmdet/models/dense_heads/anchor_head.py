@@ -149,6 +149,7 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         bbox_pred = self.conv_reg(x)
         return cls_score, bbox_pred
 
+    # forward方法会调用forward_single方法
     def forward(self, feats):
         """Forward features from the upstream network.
 

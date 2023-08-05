@@ -418,7 +418,7 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
             [self.get_valid_ratio(m) for m in mlvl_masks], 1)
 
         feat_flatten = feat_flatten.permute(1, 0, 2)  # (H*W, bs, embed_dims)
-
+        # 这里的memory的来源，因为这个地方就不需要调用encoder了
         memory = feat_flatten
         memory = memory.permute(1, 0, 2)
         bs, _, c = memory.shape

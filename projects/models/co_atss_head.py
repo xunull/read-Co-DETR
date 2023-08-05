@@ -137,10 +137,10 @@ class CoATSSHead(AnchorHead):
             cls_feat = cls_conv(cls_feat)
         for reg_conv in self.reg_convs:
             reg_feat = reg_conv(reg_feat)
-        cls_score = self.atss_cls(cls_feat)
+        cls_score = self.atss_cls(cls_feat) # [bs,80,h,w]
         # we just follow atss, not apply exp in bbox_pred
-        bbox_pred = scale(self.atss_reg(reg_feat)).float()
-        centerness = self.atss_centerness(reg_feat)
+        bbox_pred = scale(self.atss_reg(reg_feat)).float() # [bs,4,h,w]
+        centerness = self.atss_centerness(reg_feat) # [bs,1,h,w]
         return cls_score, bbox_pred, centerness
 
     def loss_single(self, anchors, cls_score, bbox_pred, centerness, labels,

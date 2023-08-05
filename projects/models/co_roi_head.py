@@ -80,14 +80,14 @@ class CoStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         """
         # assign gts and sample proposals
         if self.with_bbox or self.with_mask:
-            num_imgs = len(img_metas)
+            num_imgs = len(img_metas) # bs
             if gt_bboxes_ignore is None:
                 gt_bboxes_ignore = [None for _ in range(num_imgs)]
-            sampling_results = []
+            sampling_results = [] # 采样结果
             for i in range(num_imgs):
                 assign_result = self.bbox_assigner.assign(
                     proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
-                    gt_labels[i])
+                    gt_labels[i]) # 将proposals和GT进行配对
                 sampling_result = self.bbox_sampler.sample(
                     assign_result,
                     proposal_list[i],
@@ -129,7 +129,7 @@ class CoStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             ori_bbox_feats = torch.cat(ori_bbox_feats, dim=0)
             pos_coords = (ori_coords, ori_labels, ori_bbox_targets, ori_bbox_feats, 'rcnn')
             losses.update(pos_coords=pos_coords)
-
+        # 掩码的loss，检测这里不需要
         # mask head forward and loss
         if self.with_mask:
             mask_results = self._mask_forward_train(x, sampling_results,
@@ -151,7 +151,7 @@ class CoStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
         bbox_results = dict(
             cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
         return bbox_results
-
+    # 得到bbox的结果 class的记过，这个就是roi head最后的分类，box头
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels,
                             img_metas):
         """Run forward function and calculate loss for box head in training."""

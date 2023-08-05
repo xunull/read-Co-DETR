@@ -11,6 +11,7 @@ from ..builder import HEADS
 from .anchor_head import AnchorHead
 
 
+# Co-DETR 会用这个RPNHead
 @HEADS.register_module()
 class RPNHead(AnchorHead):
     """RPN head.
@@ -55,18 +56,23 @@ class RPNHead(AnchorHead):
                 self.in_channels, self.feat_channels, 3, padding=1)
         self.rpn_cls = nn.Conv2d(self.feat_channels,
                                  self.num_base_priors * self.cls_out_channels,
-                                 1)
+                                 1)  # 输出是前景的概率
         self.rpn_reg = nn.Conv2d(self.feat_channels, self.num_base_priors * 4,
                                  1)
 
+    # 会被父类的forward方法调用，父类的forward方法会被父父类的forward_train方法调用
     def forward_single(self, x):
         """Forward feature map of a single scale level."""
+        # x是某一个特征图的特征 [bs,256,h,w]
         x = self.rpn_conv(x)
         x = F.relu(x, inplace=False)
+        # [bs,9,h,w] 9= scales*ratios
         rpn_cls_score = self.rpn_cls(x)
+        # [bs,36,h,w] 36=4*9
         rpn_bbox_pred = self.rpn_reg(x)
         return rpn_cls_score, rpn_bbox_pred
 
+    # 调用完上面的forward_train里面会调用loss方法
     def loss(self,
              cls_scores,
              bbox_preds,
@@ -77,7 +83,7 @@ class RPNHead(AnchorHead):
 
         Args:
             cls_scores (list[Tensor]): Box scores for each scale level
-                Has shape (N, num_anchors * num_classes, H, W)
+                Has shape (N, num_anchors * num_classes, H, W)  每个bs，特征层的，9个，h,w
             bbox_preds (list[Tensor]): Box energies / deltas for each scale
                 level with shape (N, num_anchors * 4, H, W)
             gt_bboxes (list[Tensor]): Ground truth bboxes for each image with
@@ -90,6 +96,7 @@ class RPNHead(AnchorHead):
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
+        # 两个内容，loss_cls, loss_bbox 各为list，为每个特征层
         losses = super(RPNHead, self).loss(
             cls_scores,
             bbox_preds,
@@ -178,7 +185,7 @@ class RPNHead(AnchorHead):
             mlvl_bbox_preds.append(rpn_bbox_pred)
             mlvl_valid_anchors.append(anchors)
             level_ids.append(
-                scores.new_full((scores.size(0), ),
+                scores.new_full((scores.size(0),),
                                 level_idx,
                                 dtype=torch.long))
 
