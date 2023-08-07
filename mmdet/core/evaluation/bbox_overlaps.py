@@ -52,6 +52,7 @@ def bbox_overlaps(bboxes1,
         y_start = np.maximum(bboxes1[i, 1], bboxes2[:, 1])
         x_end = np.minimum(bboxes1[i, 2], bboxes2[:, 2])
         y_end = np.minimum(bboxes1[i, 3], bboxes2[:, 3])
+        # 重叠的部分
         overlap = np.maximum(x_end - x_start + extra_length, 0) * np.maximum(
             y_end - y_start + extra_length, 0)
         if mode == 'iou':
@@ -59,6 +60,7 @@ def bbox_overlaps(bboxes1,
         else:
             union = area1[i] if not exchange else area2
         union = np.maximum(union, eps)
+
         ious[i, :] = overlap / union
     if exchange:
         ious = ious.T

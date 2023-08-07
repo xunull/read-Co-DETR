@@ -165,7 +165,9 @@ class CoDeformDETRHead(DETRHead):
             feat = enc_outputs[start:end].permute(1, 2, 0).contiguous()  # 取出某一层层的encoder输出的token（feature）[bs,256,hw]
             start = end
             outs.append(feat.reshape(bs, c, h, w))
+
         outs.append(self.downsample(outs[-1]))  # 正常的detr只用4层，这里在多了一层
+
         # [6,300,bs,256] -> [6,bs,300,256]
         hs = hs.permute(0, 2, 1, 3)
         outputs_classes = []
