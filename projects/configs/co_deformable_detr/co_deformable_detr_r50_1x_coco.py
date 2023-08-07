@@ -53,7 +53,9 @@ model = dict(
         in_channels=2048,
         sync_cls_avg_factor=True,
         with_box_refine=True,
+        # todo
         as_two_stage=True,
+        # todo
         mixed_selection=True,
         transformer=dict(
             type='CoDeformableDetrTransformer',

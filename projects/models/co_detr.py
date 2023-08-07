@@ -160,7 +160,8 @@ class CoDETR(BaseDetector):
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
-        batch_input_shape = tuple(img[0].size()[-2:])  # img [bs,3,h,w] 图像的尺寸
+        # img [bs,3,h,w] 图像的尺寸
+        batch_input_shape = tuple(img[0].size()[-2:])
         for img_meta in img_metas:
             img_meta['batch_input_shape'] = batch_input_shape
 
@@ -169,12 +170,12 @@ class CoDETR(BaseDetector):
                 input_img_h, input_img_w = img_metas[i]['batch_input_shape']
                 img_metas[i]['img_shape'] = [input_img_h, input_img_w, 3]
 
-        # 提取特征 (经过backbone, 以及token的变换)
+        # 提取特征 (经过backbone, 以及->token的变换)
         x = self.extract_feat(img, img_metas)
 
         losses = dict()
 
-        # update loss的方法
+        # update loss的方法, 会更新key，key加上idx，同时有权重的处理
         def upd_loss(losses, idx, weight=1):
             new_losses = dict()
             for k, v in losses.items():
@@ -189,9 +190,9 @@ class CoDETR(BaseDetector):
         # DETR encoder and decoder forward
         if self.with_query_head:
             # bbox_losses 是decoder最后一层的loss，encoder的loss，以及decoder其他层的loss
-            # x是encoder的输出还原到了特征图的形式
-            bbox_losses, x = self.query_head.forward_train(x, img_metas, gt_bboxes,
-                                                           gt_labels, gt_bboxes_ignore)
+            # x是encoder的输出变换回特征图的形式
+            bbox_losses, x = self.query_head.forward_train(x, img_metas,
+                                                           gt_bboxes, gt_labels, gt_bboxes_ignore)
             losses.update(bbox_losses)
 
         # RPN forward and loss
@@ -206,8 +207,6 @@ class CoDETR(BaseDetector):
             #   (rpn_reg): Conv2d(256, 36, kernel_size=(1, 1), stride=(1, 1))
             # )
             # init_cfg={'type': 'Normal', 'layer': 'Conv2d', 'std': 0.01}
-
-
 
             # proposal_list list [1000,5] ,list为bs， 1000个nms之后的结果，5是四个坐标值，以及前景的分数值
             # 返回的是rpn阶段的loss, 以及rpn后给出的proposals
@@ -225,14 +224,16 @@ class CoDETR(BaseDetector):
             proposal_list = proposals
 
         positive_coords = []
+
+        # 上面是RPN的处理，RPN处理之后，就会交给RoI，FasterRCNN的流程
         # roi_head CoStandardRoIHead
         for i in range(len(self.roi_head)):
             # loss_cls, acc, loss_bbox, pos_coords
             roi_losses = self.roi_head[i].forward_train(x, img_metas, proposal_list,
-                                                        gt_bboxes, gt_labels,
-                                                        gt_bboxes_ignore, gt_masks,
+                                                        gt_bboxes, gt_labels, gt_bboxes_ignore, gt_masks,
                                                         **kwargs)
-            # todo
+
+            # Customized Positive Queries Generation
             if self.with_pos_coord:
 
                 positive_coords.append(roi_losses.pop('pos_coords'))
@@ -243,29 +244,33 @@ class CoDETR(BaseDetector):
             # upd_loss 会在loss的key后面补上idx
             roi_losses = upd_loss(roi_losses, idx=i)
             losses.update(roi_losses)
+
         # CoATSSHead
+        # ATSS 单阶段检测，不需要RPN
         for i in range(len(self.bbox_head)):
-            # 这个不需要proposal 四个内容 loss_cls, loss_bbox, loss_centerness, pos_coords
-            bbox_losses = self.bbox_head[i].forward_train(x, img_metas, gt_bboxes,
-                                                          gt_labels, gt_bboxes_ignore)
-
+            # 四个内容 loss_cls, loss_bbox, loss_centerness, pos_coords
+            bbox_losses = self.bbox_head[i].forward_train(x, img_metas,
+                                                          gt_bboxes, gt_labels, gt_bboxes_ignore)
+            # Customized Positive Queries Generation
             if self.with_pos_coord:
-
                 pos_coords = bbox_losses.pop('pos_coords')
                 positive_coords.append(pos_coords)
             else:
-
                 if 'pos_coords' in bbox_losses.keys():
                     tmp = bbox_losses.pop('pos_coords')
 
             bbox_losses = upd_loss(bbox_losses, idx=i + len(self.roi_head))
             losses.update(bbox_losses)
 
+        # Customized Positive Queries Generation
         if self.with_pos_coord and len(positive_coords) > 0:
+            # 每个辅助头都会生成一组
             for i in range(len(positive_coords)):
-                # 这个还是CoDeformDETRHead，还是那个transformer，上面也调用过一个了，这里调用的是 forward_train_aux 方法，不再是forward_train了
+                # self.query_head 这个还是CoDeformDETRHead，还是那个transformer
+                # 上面也调用过一个了，这里调用的是 forward_train_aux 方法，不再是forward_train了
                 bbox_losses = self.query_head.forward_train_aux(x, img_metas, gt_bboxes,
-                                                                gt_labels, gt_bboxes_ignore, positive_coords[i], i)
+                                                                gt_labels, gt_bboxes_ignore,
+                                                                positive_coords[i], i)
 
                 bbox_losses = upd_loss(bbox_losses, idx=i)
 

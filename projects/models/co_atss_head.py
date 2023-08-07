@@ -137,10 +137,10 @@ class CoATSSHead(AnchorHead):
             cls_feat = cls_conv(cls_feat)
         for reg_conv in self.reg_convs:
             reg_feat = reg_conv(reg_feat)
-        cls_score = self.atss_cls(cls_feat) # [bs,80,h,w]
+        cls_score = self.atss_cls(cls_feat)  # [bs,80,h,w]
         # we just follow atss, not apply exp in bbox_pred
-        bbox_pred = scale(self.atss_reg(reg_feat)).float() # [bs,4,h,w]
-        centerness = self.atss_centerness(reg_feat) # [bs,1,h,w]
+        bbox_pred = scale(self.atss_reg(reg_feat)).float()  # [bs,4,h,w]
+        centerness = self.atss_centerness(reg_feat)  # [bs,1,h,w]
         return cls_score, bbox_pred, centerness
 
     def loss_single(self, anchors, cls_score, bbox_pred, centerness, labels,
@@ -171,7 +171,7 @@ class CoATSSHead(AnchorHead):
             -1, self.cls_out_channels).contiguous()
         bbox_pred = bbox_pred.permute(0, 2, 3, 1).reshape(-1, 4)
         centerness = centerness.permute(0, 2, 3, 1).reshape(-1)
-        bbox_targets = bbox_targets.reshape(-1, 4)
+        bbox_targets = bbox_targets.reshape(-1, 4) # todo
         labels = labels.reshape(-1)
         label_weights = label_weights.reshape(-1)
 
@@ -190,17 +190,13 @@ class CoATSSHead(AnchorHead):
             pos_anchors = anchors[pos_inds]
             pos_centerness = centerness[pos_inds]
 
-            centerness_targets = self.centerness_target(
-                pos_anchors, pos_bbox_targets)
-            pos_decode_bbox_pred = self.bbox_coder.decode(
-                pos_anchors, pos_bbox_pred)
+            centerness_targets = self.centerness_target(pos_anchors, pos_bbox_targets)
+
+            pos_decode_bbox_pred = self.bbox_coder.decode(pos_anchors, pos_bbox_pred)
 
             # regression loss
-            loss_bbox = self.loss_bbox(
-                pos_decode_bbox_pred,
-                pos_bbox_targets,
-                weight=centerness_targets,
-                avg_factor=1.0)
+            loss_bbox = self.loss_bbox(pos_decode_bbox_pred, pos_bbox_targets, weight=centerness_targets,
+                                       avg_factor=1.0)
 
             # centerness loss
             loss_centerness = self.loss_centerness(
@@ -209,9 +205,11 @@ class CoATSSHead(AnchorHead):
                 avg_factor=num_total_samples)
 
         else:
+            # 都为0
             loss_bbox = bbox_pred.sum() * 0
             loss_centerness = centerness.sum() * 0
             centerness_targets = bbox_targets.new_tensor(0.)
+
 
         return loss_cls, loss_bbox, loss_centerness, centerness_targets.sum()
 
@@ -260,12 +258,15 @@ class CoATSSHead(AnchorHead):
             gt_bboxes_ignore_list=gt_bboxes_ignore,
             gt_labels_list=gt_labels,
             label_channels=label_channels)
+
         if cls_reg_targets is None:
             return None
 
-        (anchor_list, labels_list, label_weights_list, bbox_targets_list,
-         bbox_weights_list, num_total_pos, num_total_neg,
+        (anchor_list, labels_list, label_weights_list,
+         bbox_targets_list,bbox_weights_list,
+         num_total_pos, num_total_neg,
          ori_anchors, ori_labels, ori_bbox_targets) = cls_reg_targets
+
         num_total_samples = reduce_mean(
             torch.tensor(num_total_pos, dtype=torch.float,
                          device=device)).item()
@@ -286,32 +287,39 @@ class CoATSSHead(AnchorHead):
 
         bbox_avg_factor = sum(bbox_avg_factor)
         bbox_avg_factor = reduce_mean(bbox_avg_factor).clamp_(min=1).item()
-        losses_bbox = list(map(lambda x: x / bbox_avg_factor, losses_bbox))
+        losses_bbox = list(map(lambda x: x / bbox_avg_factor, losses_bbox)) # bbox loss
 
         pos_coords = (ori_anchors, ori_labels, ori_bbox_targets, 'atss')
         return dict(
             loss_cls=losses_cls,
             loss_bbox=losses_bbox,
             loss_centerness=loss_centerness,
-            pos_coords=pos_coords)
+            pos_coords=pos_coords) # 最后一个返回值作为GT，为Customized Positive Queries Generation
 
     def centerness_target(self, anchors, gts):
+        # 中心分数
         # only calculate pos centerness targets, otherwise there may be nan
+        # 中心坐标
         anchors_cx = (anchors[:, 2] + anchors[:, 0]) / 2
         anchors_cy = (anchors[:, 3] + anchors[:, 1]) / 2
+        # 左上
         l_ = anchors_cx - gts[:, 0]
         t_ = anchors_cy - gts[:, 1]
+        # 右下
         r_ = gts[:, 2] - anchors_cx
         b_ = gts[:, 3] - anchors_cy
 
         left_right = torch.stack([l_, r_], dim=1)
         top_bottom = torch.stack([t_, b_], dim=1)
+
         centerness = torch.sqrt(
             (left_right.min(dim=-1)[0] / left_right.max(dim=-1)[0]) *
             (top_bottom.min(dim=-1)[0] / top_bottom.max(dim=-1)[0]))
         assert not torch.isnan(centerness).any()
+
         return centerness
 
+    # todo
     def get_targets(self,
                     anchor_list,
                     valid_flag_list,

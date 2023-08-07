@@ -372,6 +372,7 @@ class CoDeformDETRHead(DETRHead):
             bbox_preds, bbox_targets, bbox_weights, avg_factor=num_total_pos)
         return loss_cls * self.lambda_1, loss_bbox * self.lambda_1, loss_iou * self.lambda_1
 
+    # pos_coords为list,rcnn的内容是5个，atss的内容是4个，第一个是提议的坐标，第二个label，第三个是gt
     def get_aux_targets(self, pos_coords, img_metas, mlvl_feats, head_idx):
         coords, labels, targets = pos_coords[:3] # 得到的坐标，label，类似于gt
         head_name = pos_coords[-1]
@@ -404,7 +405,7 @@ class CoDeformDETRHead(DETRHead):
             coord, label, target = coords[i], labels[i], targets[i]
             feats = all_feats[i]
             if 'rcnn' in head_name:
-                feats = pos_coords[-2][i] # todo
+                feats = pos_coords[-2][i] # rcnn的特征使用的是其head输出的值
                 num_coords_per_point = 1
             else:
                 num_coords_per_point = coord.shape[0] // feats.shape[0]
@@ -424,6 +425,7 @@ class CoDeformDETRHead(DETRHead):
             # 坐标变成相对值
             coord = bbox_xyxy_to_cxcywh(coord[pos_inds] / factor)
             label = label[pos_inds]
+            # gt变成相对值
             target = bbox_xyxy_to_cxcywh(target[pos_inds] / factor)
             feat = feats[pos_inds]
 
@@ -474,7 +476,7 @@ class CoDeformDETRHead(DETRHead):
         aux_label_weights = label_weights
         aux_bbox_weights = bbox_weights
         return (aux_coords, aux_labels, aux_targets, aux_label_weights, aux_bbox_weights, aux_feats, attn_masks)
-    # co_detr中被调用，
+    # co_detr中被调用
     # over-write because img_metas are needed as inputs for bbox_head.
     def forward_train_aux(self,
                           x,
