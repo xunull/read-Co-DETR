@@ -83,12 +83,12 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
             self.assigner = build_assigner(self.train_cfg.assigner)
             if hasattr(self.train_cfg,
                        'sampler') and self.train_cfg.sampler.type.split(
-                           '.')[-1] != 'PseudoSampler':
+                '.')[-1] != 'PseudoSampler':
                 self.sampling = True
                 sampler_cfg = self.train_cfg.sampler
                 # avoid BC-breaking
                 if loss_cls['type'] in [
-                        'FocalLoss', 'GHMC', 'QualityFocalLoss'
+                    'FocalLoss', 'GHMC', 'QualityFocalLoss'
                 ]:
                     warnings.warn(
                         'DeprecationWarning: Determining whether to sampling'
@@ -241,7 +241,7 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
                                            img_meta['img_shape'][:2],
                                            self.train_cfg.allowed_border)
         if not inside_flags.any():
-            return (None, ) * 7
+            return (None,) * 7
         # assign gt and sample anchors
         anchors = flat_anchors[inside_flags, :]
 
@@ -254,7 +254,7 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         num_valid_anchors = anchors.shape[0]
         bbox_targets = torch.zeros_like(anchors)
         bbox_weights = torch.zeros_like(anchors)
-        labels = anchors.new_full((num_valid_anchors, ),
+        labels = anchors.new_full((num_valid_anchors,),
                                   self.num_classes,
                                   dtype=torch.long)
         label_weights = anchors.new_zeros(num_valid_anchors, dtype=torch.float)
@@ -394,7 +394,7 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         res = (labels_list, label_weights_list, bbox_targets_list,
                bbox_weights_list, num_total_pos, num_total_neg)
         if return_sampling_results:
-            res = res + (sampling_results_list, )
+            res = res + (sampling_results_list,)
         for i, r in enumerate(rest_results):  # user-added return values
             rest_results[i] = images_to_levels(r, num_level_anchors)
 
@@ -476,6 +476,7 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
+
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         assert len(featmap_sizes) == self.prior_generator.num_levels
 
@@ -518,6 +519,7 @@ class AnchorHead(BaseDenseHead, BBoxTestMixin):
             bbox_targets_list,
             bbox_weights_list,
             num_total_samples=num_total_samples)
+
         return dict(loss_cls=losses_cls, loss_bbox=losses_bbox)
 
     def aug_test(self, feats, img_metas, rescale=False):

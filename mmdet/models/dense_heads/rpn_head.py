@@ -72,6 +72,7 @@ class RPNHead(AnchorHead):
         rpn_bbox_pred = self.rpn_reg(x)
         return rpn_cls_score, rpn_bbox_pred
 
+
     # 调用完上面的forward_train里面会调用loss方法
     def loss(self,
              cls_scores,
@@ -104,6 +105,7 @@ class RPNHead(AnchorHead):
             None,
             img_metas,
             gt_bboxes_ignore=gt_bboxes_ignore)
+
         return dict(
             loss_rpn_cls=losses['loss_cls'], loss_rpn_bbox=losses['loss_bbox'])
 

@@ -148,6 +148,7 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
         self.mixed_selection = mixed_selection
         self.with_pos_coord = with_pos_coord
         self.with_coord_feat = with_coord_feat
+        # todo
         self.num_co_heads = num_co_heads
         super(CoDeformableDetrTransformer, self).__init__(**kwargs)
         self._init_layers()
@@ -599,8 +600,10 @@ class CoDinoTransformer(CoDeformableDetrTransformer):
     def _init_layers(self):
         if self.with_pos_coord:
             if self.num_co_heads > 0:
+                # 位置，公式4的前面
                 self.aux_pos_trans = nn.ModuleList()
                 self.aux_pos_trans_norm = nn.ModuleList()
+                # 特征，公式4的后面
                 self.pos_feats_trans = nn.ModuleList()
                 self.pos_feats_norm = nn.ModuleList()
                 for i in range(self.num_co_heads):
@@ -727,6 +730,7 @@ class CoDinoTransformer(CoDeformableDetrTransformer):
 
         return inter_states, inter_references_out, topk_score, topk_anchor, memory
 
+    # 自定义正样本的计算流程中被调用
     def forward_aux(self,
                     mlvl_feats,
                     mlvl_masks,
@@ -754,12 +758,12 @@ class CoDinoTransformer(CoDeformableDetrTransformer):
             mask_flatten.append(mask)
         feat_flatten = torch.cat(feat_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
-        spatial_shapes = torch.as_tensor(
-            spatial_shapes, dtype=torch.long, device=feat_flatten.device)
-        level_start_index = torch.cat((spatial_shapes.new_zeros(
-            (1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack(
-            [self.get_valid_ratio(m) for m in mlvl_masks], 1)
+
+        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=feat_flatten.device)
+
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+
+        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in mlvl_masks], 1)
 
         feat_flatten = feat_flatten.permute(1, 0, 2)  # (H*W, bs, embed_dims)
 
@@ -772,6 +776,7 @@ class CoDinoTransformer(CoDeformableDetrTransformer):
         topk_coords_unact = inverse_sigmoid((pos_anchors))
         reference_points = (pos_anchors)
         init_reference_out = reference_points
+
         if self.num_co_heads > 0:
             pos_trans_out = self.aux_pos_trans_norm[head_idx](
                 self.aux_pos_trans[head_idx](self.get_proposal_pos_embed(topk_coords_unact)))
@@ -795,6 +800,7 @@ class CoDinoTransformer(CoDeformableDetrTransformer):
             reg_branches=reg_branches,
             **kwargs)
 
+        # 中间输出
         inter_references_out = inter_references
 
         return inter_states, inter_references_out

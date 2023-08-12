@@ -133,14 +133,21 @@ class CoATSSHead(AnchorHead):
         """
         cls_feat = x
         reg_feat = x
+
+        # 堆叠了几层卷积
         for cls_conv in self.cls_convs:
             cls_feat = cls_conv(cls_feat)
+        # 堆列了几层卷积
         for reg_conv in self.reg_convs:
             reg_feat = reg_conv(reg_feat)
-        cls_score = self.atss_cls(cls_feat)  # [bs,80,h,w]
+
+        # [bs,80,h,w]
+        cls_score = self.atss_cls(cls_feat)
         # we just follow atss, not apply exp in bbox_pred
-        bbox_pred = scale(self.atss_reg(reg_feat)).float()  # [bs,4,h,w]
-        centerness = self.atss_centerness(reg_feat)  # [bs,1,h,w]
+        # [bs,4,h,w]
+        bbox_pred = scale(self.atss_reg(reg_feat)).float()
+        # [bs,1,h,w]
+        centerness = self.atss_centerness(reg_feat)
         return cls_score, bbox_pred, centerness
 
     def loss_single(self, anchors, cls_score, bbox_pred, centerness, labels,
@@ -171,7 +178,7 @@ class CoATSSHead(AnchorHead):
             -1, self.cls_out_channels).contiguous()
         bbox_pred = bbox_pred.permute(0, 2, 3, 1).reshape(-1, 4)
         centerness = centerness.permute(0, 2, 3, 1).reshape(-1)
-        bbox_targets = bbox_targets.reshape(-1, 4) # todo
+        bbox_targets = bbox_targets.reshape(-1, 4)  # todo
         labels = labels.reshape(-1)
         label_weights = label_weights.reshape(-1)
 
@@ -210,7 +217,6 @@ class CoATSSHead(AnchorHead):
             loss_centerness = centerness.sum() * 0
             centerness_targets = bbox_targets.new_tensor(0.)
 
-
         return loss_cls, loss_bbox, loss_centerness, centerness_targets.sum()
 
     @force_fp32(apply_to=('cls_scores', 'bbox_preds', 'centernesses'))
@@ -246,8 +252,8 @@ class CoATSSHead(AnchorHead):
         assert len(featmap_sizes) == self.prior_generator.num_levels
 
         device = cls_scores[0].device
-        anchor_list, valid_flag_list = self.get_anchors(
-            featmap_sizes, img_metas, device=device)
+        anchor_list, valid_flag_list = self.get_anchors(featmap_sizes, img_metas, device=device)
+
         label_channels = self.cls_out_channels if self.use_sigmoid_cls else 1
 
         cls_reg_targets = self.get_targets(
@@ -263,13 +269,12 @@ class CoATSSHead(AnchorHead):
             return None
 
         (anchor_list, labels_list, label_weights_list,
-         bbox_targets_list,bbox_weights_list,
+         bbox_targets_list, bbox_weights_list,
          num_total_pos, num_total_neg,
          ori_anchors, ori_labels, ori_bbox_targets) = cls_reg_targets
 
-        num_total_samples = reduce_mean(
-            torch.tensor(num_total_pos, dtype=torch.float,
-                         device=device)).item()
+        num_total_samples = reduce_mean(torch.tensor(num_total_pos, dtype=torch.float, device=device)).item()
+
         num_total_samples = max(num_total_samples, 1.0)
         new_img_metas = [img_metas for _ in range(len(anchor_list))]
         losses_cls, losses_bbox, loss_centerness, \
@@ -287,14 +292,14 @@ class CoATSSHead(AnchorHead):
 
         bbox_avg_factor = sum(bbox_avg_factor)
         bbox_avg_factor = reduce_mean(bbox_avg_factor).clamp_(min=1).item()
-        losses_bbox = list(map(lambda x: x / bbox_avg_factor, losses_bbox)) # bbox loss
+        losses_bbox = list(map(lambda x: x / bbox_avg_factor, losses_bbox))  # bbox loss
 
         pos_coords = (ori_anchors, ori_labels, ori_bbox_targets, 'atss')
         return dict(
             loss_cls=losses_cls,
             loss_bbox=losses_bbox,
             loss_centerness=loss_centerness,
-            pos_coords=pos_coords) # 最后一个返回值作为GT，为Customized Positive Queries Generation
+            pos_coords=pos_coords)  # 最后一个返回值作为GT，为Customized Positive Queries Generation
 
     def centerness_target(self, anchors, gts):
         # 中心分数
@@ -537,6 +542,7 @@ class CoATSSHead(AnchorHead):
         else:
             loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
         losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+
         if proposal_cfg is None:
             return losses
         else:

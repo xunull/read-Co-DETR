@@ -4,7 +4,7 @@ _base_ = [
 ]
 # model settings
 num_dec_layer = 6
-# todo
+# 辅助头的loss系数，另外额外的query的loss 系数是1
 lambda_2 = 2.0
 
 model = dict(
@@ -53,9 +53,7 @@ model = dict(
         in_channels=2048,
         sync_cls_avg_factor=True,
         with_box_refine=True,
-        # todo
         as_two_stage=True,
-        # todo
         mixed_selection=True,
         transformer=dict(
             type='CoDeformableDetrTransformer',
@@ -91,8 +89,7 @@ model = dict(
                     ],
                     feedforward_channels=2048,
                     ffn_dropout=0.0,
-                    operation_order=('self_attn', 'norm', 'cross_attn', 'norm',
-                                     'ffn', 'norm')))),
+                    operation_order=('self_attn', 'norm', 'cross_attn', 'norm', 'ffn', 'norm')))),
         positional_encoding=dict(
             type='SinePositionalEncoding',
             num_feats=128,

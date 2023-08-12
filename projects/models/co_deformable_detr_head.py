@@ -25,6 +25,7 @@ class CoDeformDETRHead(DETRHead):
     def __init__(self,
                  *args,
                  max_pos_coords=300,
+                 # 论文中的参数
                  lambda_1=1,
                  with_box_refine=False,
                  as_two_stage=False,
@@ -47,7 +48,7 @@ class CoDeformDETRHead(DETRHead):
 
     def _init_layers(self):
         """Initialize classification branch and regression branch of head."""
-        # 下采用做什么的，为了迎合rpn的头？
+        # 下采样迎合rpn的头
         self.downsample = nn.Sequential(
             nn.Conv2d(self.embed_dims, self.embed_dims, kernel_size=3, stride=2, padding=1),
             nn.GroupNorm(32, self.embed_dims)
@@ -125,8 +126,8 @@ class CoDeformDETRHead(DETRHead):
         """
         batch_size = mlvl_feats[0].size(0)
         input_img_h, input_img_w = img_metas[0]['batch_input_shape']
-        img_masks = mlvl_feats[0].new_ones(
-            (batch_size, input_img_h, input_img_w))
+        img_masks = mlvl_feats[0].new_ones((batch_size, input_img_h, input_img_w))
+
         for img_id in range(batch_size):
             img_h, img_w, _ = img_metas[img_id]['img_shape']
             img_masks[img_id, :img_h, :img_w] = 0  # 制作mask，默认为1，图像区域填入0
@@ -137,8 +138,8 @@ class CoDeformDETRHead(DETRHead):
             mlvl_masks.append(
                 F.interpolate(img_masks[None],
                               size=feat.shape[-2:]).to(torch.bool).squeeze(0))
-            mlvl_positional_encodings.append(
-                self.positional_encoding(mlvl_masks[-1]))
+
+            mlvl_positional_encodings.append(self.positional_encoding(mlvl_masks[-1]))
 
         query_embeds = None
         if not self.as_two_stage or self.mixed_selection:
@@ -190,18 +191,17 @@ class CoDeformDETRHead(DETRHead):
             outputs_coord = tmp.sigmoid()
             outputs_classes.append(outputs_class)
             outputs_coords.append(outputs_coord)
+
         # 最后的decoder的那些结果
         outputs_classes = torch.stack(outputs_classes)
         outputs_coords = torch.stack(outputs_coords)
 
         if self.as_two_stage:
-            return outputs_classes, outputs_coords, \
-                enc_outputs_class, \
-                enc_outputs_coord.sigmoid(), outs
+            return outputs_classes, outputs_coords, enc_outputs_class, enc_outputs_coord.sigmoid(), outs
         else:
-            return outputs_classes, outputs_coords, \
-                None, None, outs
+            return outputs_classes, outputs_coords, None, None, outs
 
+    # 被forward_train_aux调用
     def forward_aux(self, mlvl_feats, img_metas, aux_targets, head_idx):
         """Forward function.
 
@@ -228,10 +228,13 @@ class CoDeformDETRHead(DETRHead):
                 `None` would be returned.
         """
         aux_coords, aux_labels, aux_targets, aux_label_weights, aux_bbox_weights, aux_feats, attn_masks = aux_targets
-        batch_size = mlvl_feats[0].size(0) # bs
+        # bs
+        batch_size = mlvl_feats[0].size(0)
         input_img_h, input_img_w = img_metas[0]['batch_input_shape']
-        img_masks = mlvl_feats[0].new_ones(
-            (batch_size, input_img_h, input_img_w))
+
+        img_masks = mlvl_feats[0].new_ones((batch_size, input_img_h, input_img_w))
+
+        # 制作batch mask
         for img_id in range(batch_size):
             img_h, img_w, _ = img_metas[img_id]['img_shape']
             img_masks[img_id, :img_h, :img_w] = 0
@@ -240,11 +243,12 @@ class CoDeformDETRHead(DETRHead):
         mlvl_positional_encodings = []
         for feat in mlvl_feats:
             mlvl_masks.append(
-                F.interpolate(img_masks[None],
-                              size=feat.shape[-2:]).to(torch.bool).squeeze(0))
+                F.interpolate(img_masks[None], size=feat.shape[-2:]).to(torch.bool).squeeze(0))
             mlvl_positional_encodings.append(
                 self.positional_encoding(mlvl_masks[-1]))
+
         # 以上的处理与正常的处理类似
+
         query_embeds = None
         hs, init_reference, inter_references = self.transformer.forward_aux(
             mlvl_feats,
@@ -263,6 +267,7 @@ class CoDeformDETRHead(DETRHead):
         hs = hs.permute(0, 2, 1, 3)
         outputs_classes = []
         outputs_coords = []
+
         # bbox值修正
         for lvl in range(hs.shape[0]):
             if lvl == 0:
@@ -284,8 +289,7 @@ class CoDeformDETRHead(DETRHead):
         outputs_classes = torch.stack(outputs_classes)
         outputs_coords = torch.stack(outputs_coords)
 
-        return outputs_classes, outputs_coords, \
-            None, None
+        return outputs_classes, outputs_coords, None, None
 
     def loss_single_aux(self,
                         cls_scores,
@@ -376,21 +380,27 @@ class CoDeformDETRHead(DETRHead):
 
     # pos_coords为list,rcnn的内容是5个，atss的内容是4个，第一个是提议的坐标，第二个label，第三个是gt
     def get_aux_targets(self, pos_coords, img_metas, mlvl_feats, head_idx):
-        coords, labels, targets = pos_coords[:3] # 得到的坐标，label，类似于gt
+        coords, labels, targets = pos_coords[:3]  # 得到的坐标，label，类似于gt
+        # rcnn or atss
         head_name = pos_coords[-1]
+        # batch size, channel
         bs, c = len(coords), mlvl_feats[0].shape[1]
         max_num_coords = 0
         all_feats = []
+        # bs上循环
         for i in range(bs):
             label = labels[i]
-            feats = [feat[i].reshape(c, -1).transpose(1, 0) for feat in mlvl_feats] # 一张图像上5个特征层的
+            # 一张图像上5个特征层的
+            feats = [feat[i].reshape(c, -1).transpose(1, 0) for feat in mlvl_feats]
             feats = torch.cat(feats, dim=0)
             bg_class_ind = self.num_classes
-            pos_inds = ((label >= 0)
-                        & (label < bg_class_ind)).nonzero().squeeze(1) # 正样本的index
+            # 正样本的index
+            pos_inds = ((label >= 0) & (label < bg_class_ind)).nonzero().squeeze(1)
             max_num_coords = max(max_num_coords, len(pos_inds))
             all_feats.append(feats)
-        max_num_coords = min(self.max_pos_coords, max_num_coords) # 最大的匹配的正样本的数量
+        # 最大的匹配的正样本的数量
+        max_num_coords = min(self.max_pos_coords, max_num_coords)
+        # todo 最大只能9个？
         max_num_coords = max(9, max_num_coords)
 
         if self.use_zero_padding:
@@ -399,6 +409,7 @@ class CoDeformDETRHead(DETRHead):
         else:
             attn_masks = None
             label_weights = coords[0].new_ones([bs, max_num_coords])
+
         bbox_weights = coords[0].new_zeros([bs, max_num_coords, 4])
 
         aux_coords, aux_labels, aux_targets, aux_feats = [], [], [], []
@@ -407,20 +418,24 @@ class CoDeformDETRHead(DETRHead):
             coord, label, target = coords[i], labels[i], targets[i]
             feats = all_feats[i]
             if 'rcnn' in head_name:
-                feats = pos_coords[-2][i] # rcnn的特征使用的是其head输出的值
+                feats = pos_coords[-2][i]  # rcnn的特征使用的是其head输出的值
                 num_coords_per_point = 1
             else:
                 num_coords_per_point = coord.shape[0] // feats.shape[0]
+
             feats = feats.unsqueeze(1).repeat(1, num_coords_per_point, 1)
             feats = feats.reshape(feats.shape[0] * num_coords_per_point, feats.shape[-1])
             img_meta = img_metas[i]
             img_h, img_w, _ = img_meta['img_shape']
-            factor = coord.new_tensor([img_w, img_h, img_w,
-                                       img_h]).unsqueeze(0)
+
+            factor = coord.new_tensor([img_w, img_h, img_w, img_h]).unsqueeze(0)
+
             bg_class_ind = self.num_classes
-            pos_inds = ((label >= 0)
-                        & (label < bg_class_ind)).nonzero().squeeze(1)
+            # 正样本id
+            pos_inds = ((label >= 0) & (label < bg_class_ind)).nonzero().squeeze(1)
+            # 负样本id
             neg_inds = ((label == bg_class_ind)).nonzero().squeeze(1)
+
             if pos_inds.shape[0] > max_num_coords:
                 indices = torch.randperm(pos_inds.shape[0])[:max_num_coords].cuda()
                 pos_inds = pos_inds[indices]
@@ -478,6 +493,7 @@ class CoDeformDETRHead(DETRHead):
         aux_label_weights = label_weights
         aux_bbox_weights = bbox_weights
         return (aux_coords, aux_labels, aux_targets, aux_label_weights, aux_bbox_weights, aux_feats, attn_masks)
+
     # co_detr中被调用
     # over-write because img_metas are needed as inputs for bbox_head.
     def forward_train_aux(self,
@@ -506,15 +522,19 @@ class CoDeformDETRHead(DETRHead):
 
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
-        """ # aux_coords, aux_labels, aux_targets, aux_label_weights, aux_bbox_weights, aux_feats, attn_masks
+        """
+        # aux_coords, aux_labels, aux_targets, aux_label_weights, aux_bbox_weights, aux_feats, attn_masks
         aux_targets = self.get_aux_targets(pos_coords, img_metas, x, head_idx)
-        outs = self.forward_aux(x[:-1], img_metas, aux_targets, head_idx) # x[:-1] 这里的x还是5个，多了一个，多的那个是给rpn以及roi和atss使用的
+        # x[:-1] 这里的x还是5个，多了一个，多的那个是给rpn以及roi和atss使用的
+        outs = self.forward_aux(x[:-1], img_metas, aux_targets, head_idx)
         outs = outs + aux_targets
+
         if gt_labels is None:
             loss_inputs = outs + (gt_bboxes, img_metas)
         else:
 
             loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
+
         losses = self.loss_aux(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
         return losses
 
@@ -570,13 +590,13 @@ class CoDeformDETRHead(DETRHead):
 
         num_dec_layers = len(all_cls_scores)
         all_labels = [aux_labels for _ in range(num_dec_layers)]
+        # 权重值
         all_label_weights = [aux_label_weights for _ in range(num_dec_layers)]
         all_bbox_targets = [aux_targets for _ in range(num_dec_layers)]
         all_bbox_weights = [aux_bbox_weights for _ in range(num_dec_layers)]
+
         img_metas_list = [img_metas for _ in range(num_dec_layers)]
-        all_gt_bboxes_ignore_list = [
-            gt_bboxes_ignore for _ in range(num_dec_layers)
-        ]
+        all_gt_bboxes_ignore_list = [gt_bboxes_ignore for _ in range(num_dec_layers)]
 
         losses_cls, losses_bbox, losses_iou = multi_apply(
             self.loss_single_aux, all_cls_scores, all_bbox_preds,
@@ -599,6 +619,7 @@ class CoDeformDETRHead(DETRHead):
             loss_dict[f'd{num_dec_layer}.loss_bbox_aux'] = loss_bbox_i
             loss_dict[f'd{num_dec_layer}.loss_iou_aux'] = loss_iou_i
             num_dec_layer += 1
+
         return loss_dict
 
     # over-write because img_metas are needed as inputs for bbox_head.
@@ -685,24 +706,25 @@ class CoDeformDETRHead(DETRHead):
         #     f'{self.__class__.__name__} only supports ' \
         #     f'for gt_bboxes_ignore setting to None.'
 
+        # decoder的层数
         num_dec_layers = len(all_cls_scores)
+
         # 复制6份
         all_gt_bboxes_list = [gt_bboxes_list for _ in range(num_dec_layers)]
         # 复制6份
         all_gt_labels_list = [gt_labels_list for _ in range(num_dec_layers)]
         # 复制6份
-        all_gt_bboxes_ignore_list = [
-            gt_bboxes_ignore for _ in range(num_dec_layers)
-        ]
+        all_gt_bboxes_ignore_list = [gt_bboxes_ignore for _ in range(num_dec_layers)]
         # 复制6份
         img_metas_list = [img_metas for _ in range(num_dec_layers)]
-
 
         # 对decoder的结果进行loss计算
         # loss_single 对这些6份的list, zip调用的意思
         losses_cls, losses_bbox, losses_iou = multi_apply(
-            self.loss_single, all_cls_scores, all_bbox_preds,
-            all_gt_bboxes_list, all_gt_labels_list, img_metas_list,
+            self.loss_single,
+            all_cls_scores, all_bbox_preds,
+            all_gt_bboxes_list, all_gt_labels_list,
+            img_metas_list,
             all_gt_bboxes_ignore_list)
 
         loss_dict = dict()

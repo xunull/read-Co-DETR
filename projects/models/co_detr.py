@@ -13,10 +13,12 @@ class CoDETR(BaseDetector):
     def __init__(self,
                  backbone,
                  neck=None,
+                 # 四个头
                  query_head=None,
                  rpn_head=None,
                  roi_head=[None],
                  bbox_head=[None],
+
                  train_cfg=[None, None],
                  test_cfg=[None, None],
                  pretrained=[None, None],
@@ -25,11 +27,12 @@ class CoDETR(BaseDetector):
                  with_attn_mask=True,
                  eval_module='detr',
                  eval_index=0):
+
         super(CoDETR, self).__init__(init_cfg)
         self.with_pos_coord = with_pos_coord
         self.with_attn_mask = with_attn_mask
         # Module for evaluation, ['detr', 'one-stage', 'two-stage']
-        self.eval_module = eval_module  # todo detr是什么意思
+        self.eval_module = eval_module
         # Module index for evaluation
         self.eval_index = eval_index
         self.backbone = build_backbone(backbone)
@@ -39,6 +42,7 @@ class CoDETR(BaseDetector):
         if neck is not None:
             self.neck = build_neck(neck)
 
+        # CoDeformDETRHead
         if query_head is not None:
             query_head.update(
                 train_cfg=train_cfg[head_idx] if (train_cfg is not None and train_cfg[head_idx] is not None) else None)
@@ -47,13 +51,15 @@ class CoDETR(BaseDetector):
             self.query_head.init_weights()
             head_idx += 1
 
+        # RPNHead
         if rpn_head is not None:
             rpn_train_cfg = train_cfg[head_idx].rpn if (
                     train_cfg is not None and train_cfg[head_idx] is not None) else None
             rpn_head_ = rpn_head.copy()
             rpn_head_.update(train_cfg=rpn_train_cfg, test_cfg=test_cfg[head_idx].rpn)
-            self.rpn_head = build_head(rpn_head_)  # RPNHead
+            self.rpn_head = build_head(rpn_head_)
             self.rpn_head.init_weights()
+
         # CoStandardRoIHead
         self.roi_head = nn.ModuleList()
         for i in range(len(roi_head)):
@@ -64,6 +70,7 @@ class CoDETR(BaseDetector):
                 roi_head[i].update(test_cfg=test_cfg[i + head_idx].rcnn)
                 self.roi_head.append(build_head(roi_head[i]))
                 self.roi_head[-1].init_weights()
+
         # CoATSSHead
         self.bbox_head = nn.ModuleList()
         for i in range(len(bbox_head)):
@@ -113,7 +120,7 @@ class CoDETR(BaseDetector):
             x = self.neck(x)
         return x
 
-    # todo
+    # 用于计算网络计算量
     def forward_dummy(self, img):
         """Used for computing network flops.
 
@@ -199,6 +206,7 @@ class CoDETR(BaseDetector):
         if self.with_rpn:
             # {'nms_pre': 4000, 'max_per_img': 1000, 'nms': {'type': 'nms', 'iou_threshold': 0.7}, 'min_bbox_size': 0}
             proposal_cfg = self.train_cfg[self.head_idx].get('rpn_proposal', self.test_cfg[self.head_idx].rpn)
+
             # RPNHead(
             #   (loss_cls): CrossEntropyLoss(avg_non_ignore=False)
             #   (loss_bbox): L1Loss()
@@ -211,10 +219,10 @@ class CoDETR(BaseDetector):
             # proposal_list list [1000,5] ,list为bs， 1000个nms之后的结果，5是四个坐标值，以及前景的分数值
             # 返回的是rpn阶段的loss, 以及rpn后给出的proposals
             rpn_losses, proposal_list = self.rpn_head.forward_train(
-                x,
+                x,  # encoder输出的特征图
                 img_metas,
                 gt_bboxes,
-                gt_labels=None,
+                gt_labels=None,  # rpn只需要box即可，无需类别
                 gt_bboxes_ignore=gt_bboxes_ignore,
                 proposal_cfg=proposal_cfg,
                 **kwargs)
@@ -223,22 +231,26 @@ class CoDETR(BaseDetector):
         else:
             proposal_list = proposals
 
+        # 自定义的正样本选择
         positive_coords = []
 
-        # 上面是RPN的处理，RPN处理之后，就会交给RoI，FasterRCNN的流程
+        # 上面是RPN的处理，RPN处理之后，就会交给RoI，这里是FasterRCNN的流程
+        # 当然还可以加入多个头，共用这一个rpn的结果
+
         # roi_head CoStandardRoIHead
         for i in range(len(self.roi_head)):
             # loss_cls, acc, loss_bbox, pos_coords
-            roi_losses = self.roi_head[i].forward_train(x, img_metas, proposal_list,
+            roi_losses = self.roi_head[i].forward_train(x, img_metas,
+                                                        proposal_list, # proposal_list 是rpn的结果
                                                         gt_bboxes, gt_labels, gt_bboxes_ignore, gt_masks,
                                                         **kwargs)
 
             # Customized Positive Queries Generation
             if self.with_pos_coord:
-
+                # 加入到自定义的正样本选择
                 positive_coords.append(roi_losses.pop('pos_coords'))
             else:
-
+                # 不需要，那么就将pos_coords 删除
                 if 'pos_coords' in roi_losses.keys():
                     tmp = roi_losses.pop('pos_coords')
             # upd_loss 会在loss的key后面补上idx
@@ -251,7 +263,8 @@ class CoDETR(BaseDetector):
             # 四个内容 loss_cls, loss_bbox, loss_centerness, pos_coords
             bbox_losses = self.bbox_head[i].forward_train(x, img_metas,
                                                           gt_bboxes, gt_labels, gt_bboxes_ignore)
-            # Customized Positive Queries Generation
+
+            # Customized Positive Queries Generation, 与上面的方法类似
             if self.with_pos_coord:
                 pos_coords = bbox_losses.pop('pos_coords')
                 positive_coords.append(pos_coords)

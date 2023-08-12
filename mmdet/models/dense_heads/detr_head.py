@@ -301,6 +301,7 @@ class DETRHead(AnchorFreeHead):
         ]
         img_metas_list = [img_metas for _ in range(num_dec_layers)]
 
+        # 调用loss_single
         losses_cls, losses_bbox, losses_iou = multi_apply(
             self.loss_single, all_cls_scores, all_bbox_preds,
             all_gt_bboxes_list, all_gt_labels_list, img_metas_list,

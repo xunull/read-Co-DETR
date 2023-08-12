@@ -52,6 +52,7 @@ class CoStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
     def forward_train(self,
                       x,
                       img_metas,
+                      # rpn输出的proposals
                       proposal_list,
                       gt_bboxes,
                       gt_labels,
@@ -79,15 +80,21 @@ class CoStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
             dict[str, Tensor]: a dictionary of loss components
         """
         # assign gts and sample proposals
+        # roi的采样
         if self.with_bbox or self.with_mask:
-            num_imgs = len(img_metas) # bs
+            # bs
+            num_imgs = len(img_metas)
             if gt_bboxes_ignore is None:
                 gt_bboxes_ignore = [None for _ in range(num_imgs)]
-            sampling_results = [] # 采样结果
+
+            # 采样结果
+            sampling_results = []
             for i in range(num_imgs):
+                # 将proposals和GT进行配对
                 assign_result = self.bbox_assigner.assign(
-                    proposal_list[i], gt_bboxes[i], gt_bboxes_ignore[i],
-                    gt_labels[i]) # 将proposals和GT进行配对
+                    proposal_list[i],
+                    gt_bboxes[i], gt_bboxes_ignore[i], gt_labels[i])
+                # 采样
                 sampling_result = self.bbox_sampler.sample(
                     assign_result,
                     proposal_list[i],
@@ -133,9 +140,13 @@ class CoStandardRoIHead(BaseRoIHead, BBoxTestMixin, MaskTestMixin):
                 ori_bbox_targets.append(ori_bbox_target)
                 ori_bbox_feats.append(ori_bbox_feat)
 
+            # 坐标，cat的是ori_proposals
             ori_coords = torch.cat(ori_proposals, dim=0)
+            # 类别
             ori_labels = torch.cat(ori_labels, dim=0)
+            # gt的坐标
             ori_bbox_targets = torch.cat(ori_bbox_targets, dim=0)
+            # box的特征
             ori_bbox_feats = torch.cat(ori_bbox_feats, dim=0)
 
             # 给Decoder使用的额外的匹配，最后一个标识来源（rcnn或者atss）
