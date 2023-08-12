@@ -143,12 +143,12 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
                  mixed_selection=True,
                  with_pos_coord=True,
                  with_coord_feat=True,
+                 # 多少个辅助头，atss和faster rcnn是两个
                  num_co_heads=1,
                  **kwargs):
         self.mixed_selection = mixed_selection
         self.with_pos_coord = with_pos_coord
         self.with_coord_feat = with_coord_feat
-        # todo
         self.num_co_heads = num_co_heads
         super(CoDeformableDetrTransformer, self).__init__(**kwargs)
         self._init_layers()
@@ -164,6 +164,8 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
                 self.aux_pos_trans_norm = nn.ModuleList()
                 self.pos_feats_trans = nn.ModuleList()
                 self.pos_feats_norm = nn.ModuleList()
+
+                # 每个辅助头都有自己的linear
                 for i in range(self.num_co_heads):
                     self.aux_pos_trans.append(nn.Linear(self.embed_dims * 2, self.embed_dims * 2))
                     self.aux_pos_trans_norm.append(nn.LayerNorm(self.embed_dims * 2))
@@ -280,13 +282,11 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
         level_start_index = torch.cat((spatial_shapes.new_zeros(
             (1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         # 有效的比率，根据mask的01计算，真实的长宽占据batch的长款的比率
-        valid_ratios = torch.stack(
-            [self.get_valid_ratio(m) for m in mlvl_masks], 1)
+        valid_ratios = torch.stack([self.get_valid_ratio(m) for m in mlvl_masks], 1)
         # [bs,sum(hw),4,2]
-        reference_points = \
-            self.get_reference_points(spatial_shapes,
-                                      valid_ratios,
-                                      device=feat.device)
+        reference_points = self.get_reference_points(spatial_shapes,
+                                                     valid_ratios,
+                                                     device=feat.device)
         # (H*W, bs, embed_dims)
         feat_flatten = feat_flatten.permute(1, 0, 2)
         # (H*W, bs, embed_dims)
@@ -309,22 +309,18 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
         bs, _, c = memory.shape
         if self.as_two_stage:
             # [bs,sum(hw),256]  [bs,sum(hw),4] 这个是memory给出的proposals
-            output_memory, output_proposals = \
-                self.gen_encoder_output_proposals(
-                    memory, mask_flatten, spatial_shapes)
+            output_memory, output_proposals = self.gen_encoder_output_proposals(
+                memory, mask_flatten, spatial_shapes)
             # 经过类别的分类头 [bs,sum(hw),80]
-            enc_outputs_class = cls_branches[self.decoder.num_layers](
-                output_memory)
+            enc_outputs_class = cls_branches[self.decoder.num_layers](output_memory)
+
             # 经过bbox的回归头 [bs,sum(hw),4]
-            enc_outputs_coord_unact = \
-                reg_branches[
-                    self.decoder.num_layers](output_memory) + output_proposals
+            enc_outputs_coord_unact = reg_branches[self.decoder.num_layers](output_memory) + output_proposals
 
             topk = self.two_stage_num_proposals
             topk = query_embed.shape[0]
             # [bs,topk] 这里是对应的id
-            topk_proposals = torch.topk(
-                enc_outputs_class[..., 0], topk, dim=1)[1]
+            topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
             # [bs,topk,4]
             topk_coords_unact = torch.gather(
                 enc_outputs_coord_unact, 1,
@@ -332,7 +328,7 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
             topk_coords_unact = topk_coords_unact.detach()
             reference_points = topk_coords_unact.sigmoid()
             init_reference_out = reference_points
-            # todo [bs,topk,512]
+            # [bs,topk,512]
             pos_trans_out = self.pos_trans_norm(
                 self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact)))
 
@@ -455,8 +451,7 @@ class CoDeformableDetrTransformer(DeformableDetrTransformer):
             **kwargs)
 
         inter_references_out = inter_references
-        return inter_states, init_reference_out, \
-            inter_references_out
+        return inter_states, init_reference_out, inter_references_out
 
 
 def build_MLP(input_dim, hidden_dim, output_dim, num_layers):

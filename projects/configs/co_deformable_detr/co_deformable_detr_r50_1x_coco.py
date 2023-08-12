@@ -57,6 +57,7 @@ model = dict(
         mixed_selection=True,
         transformer=dict(
             type='CoDeformableDetrTransformer',
+            # 多少个辅助头
             num_co_heads=2,
             encoder=dict(
                 # 正常的encoder
@@ -130,6 +131,8 @@ model = dict(
         type='CoATSSHead',
         num_classes=80,
         in_channels=256,
+        # 论文中1个和4个性能是相同的
+        # 1个conv可以有更少的计算量
         stacked_convs=1,
         feat_channels=256,
         anchor_generator=dict(

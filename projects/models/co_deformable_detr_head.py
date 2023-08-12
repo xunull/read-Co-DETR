@@ -400,7 +400,7 @@ class CoDeformDETRHead(DETRHead):
             all_feats.append(feats)
         # 最大的匹配的正样本的数量
         max_num_coords = min(self.max_pos_coords, max_num_coords)
-        # todo 最大只能9个？
+        # 两个头就是18个，可能是为了防止增加的匹配的数量过多，一张图18个也跟原始的gt数量相当
         max_num_coords = max(9, max_num_coords)
 
         if self.use_zero_padding:
@@ -854,22 +854,23 @@ class CoDeformDETRHead(DETRHead):
                                            img_metas, gt_bboxes_ignore_list)  # 匈牙利匹配的相关结果
         (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list,
          num_total_pos, num_total_neg) = cls_reg_targets
-        labels = torch.cat(labels_list, 0)  # bs的所有cat到一起
+        # bs的所有cat到一起
+        labels = torch.cat(labels_list, 0)
         label_weights = torch.cat(label_weights_list, 0)
         bbox_targets = torch.cat(bbox_targets_list, 0)
         bbox_weights = torch.cat(bbox_weights_list, 0)
 
         # classification loss
-        cls_scores = cls_scores.reshape(-1, self.cls_out_channels)  # 前面的维度捏到一起，最后80
+        # 前面的维度捏到一起，最后80
+        cls_scores = cls_scores.reshape(-1, self.cls_out_channels)
         # construct weighted avg_factor to match with the official DETR repo
-        cls_avg_factor = num_total_pos * 1.0 + \
-                         num_total_neg * self.bg_cls_weight
+        cls_avg_factor = num_total_pos * 1.0 + num_total_neg * self.bg_cls_weight
         if self.sync_cls_avg_factor:
             cls_avg_factor = reduce_mean(
                 cls_scores.new_tensor([cls_avg_factor]))  # 多卡训练
         cls_avg_factor = max(cls_avg_factor, 1)
-        loss_cls = self.loss_cls(
-            cls_scores, labels, label_weights, avg_factor=cls_avg_factor)  # 分类的loss
+        # 分类的loss
+        loss_cls = self.loss_cls(cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
 
         # Compute the average number of gt boxes across all gpus, for
         # normalization purposes
@@ -880,8 +881,7 @@ class CoDeformDETRHead(DETRHead):
         factors = []
         for img_meta, bbox_pred in zip(img_metas, bbox_preds):
             img_h, img_w, _ = img_meta['img_shape']
-            factor = bbox_pred.new_tensor([img_w, img_h, img_w,
-                                           img_h]).unsqueeze(0).repeat(
+            factor = bbox_pred.new_tensor([img_w, img_h, img_w, img_h]).unsqueeze(0).repeat(
                 bbox_pred.size(0), 1)
             factors.append(factor)
         factors = torch.cat(factors, 0)
