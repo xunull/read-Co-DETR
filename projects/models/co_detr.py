@@ -112,6 +112,11 @@ class CoDETR(BaseDetector):
         return ((hasattr(self, 'roi_head') and self.roi_head is not None and len(self.roi_head) > 0)
                 or (hasattr(self, 'bbox_head') and self.bbox_head is not None and len(self.bbox_head) > 0))
 
+    @property
+    def with_mask(self):
+        """bool: whether the detector has a mask head"""
+        return (hasattr(self, 'roi_head') and self.roi_head is not None and len(self.roi_head)>0 and self.roi_head[0].with_mask)
+
     # 抽取出特征
     def extract_feat(self, img, img_metas=None):
         """Directly extract features from the backbone+neck."""
@@ -120,14 +125,26 @@ class CoDETR(BaseDetector):
             x = self.neck(x)
         return x
 
+    # over-write `forward_dummy` because:
+    # the forward of bbox_head requires img_metas
     # 用于计算网络计算量
     def forward_dummy(self, img):
         """Used for computing network flops.
 
         See `mmdetection/tools/analysis_tools/get_flops.py`
         """
+        warnings.warn('Warning! MultiheadAttention in DETR does not '
+                      'support flops computation! Do not use the '
+                      'results in your papers!')
+
+        batch_size, _, height, width = img.shape
+        dummy_img_metas = [
+            dict(
+                batch_input_shape=(height, width),
+                img_shape=(height, width, 3)) for _ in range(batch_size)
+        ]
         x = self.extract_feat(img)
-        outs = self.bbox_head(x)
+        outs = self.query_head(x, dummy_img_metas)
         return outs
 
     def forward_train(self,
@@ -306,7 +323,7 @@ class CoDETR(BaseDetector):
         x = self.extract_feat(img, img_metas)
         if self.with_query_head:
             results = self.query_head.forward(x, img_metas)
-            x = results[-2]
+            x = results[-1]
         if proposals is None:
             proposal_list = self.rpn_head.simple_test_rpn(x, img_metas)
         else:
@@ -372,7 +389,7 @@ class CoDETR(BaseDetector):
         x = self.extract_feat(img, img_metas)
         if self.with_query_head:
             results = self.query_head.forward(x, img_metas)
-            x = results[-2]
+            x = results[-1]
         results_list = self.bbox_head[self.eval_index].simple_test(
             x, img_metas, rescale=rescale)
         bbox_results = [
@@ -384,9 +401,9 @@ class CoDETR(BaseDetector):
     def simple_test(self, img, img_metas, proposals=None, rescale=False):
         """Test without augmentation."""
         assert self.eval_module in ['detr', 'one-stage', 'two-stage']
-        if self.with_bbox and self.eval_module == 'one-stage':
-            return self.simple_test_query_head(img, img_metas, proposals, rescale)
-        if self.with_roi_head and self.eval_module == 'two-stage':
+        if self.with_bbox and self.eval_module=='one-stage':
+            return self.simple_test_bbox_head(img, img_metas, proposals, rescale)
+        if self.with_roi_head and self.eval_module=='two-stage':
             return self.simple_test_roi_head(img, img_metas, proposals, rescale)
         return self.simple_test_query_head(img, img_metas, proposals, rescale)
 
@@ -433,7 +450,7 @@ class CoDETR(BaseDetector):
                 and class labels of shape [N, num_det].
         """
         x = self.extract_feat(img)
-        outs = self.query_head(x)
+        outs = self.query_head.forward_onnx(x, img_metas)[:2]
         # get origin input shape to support onnx dynamic shape
 
         # get shape as tensor
@@ -448,7 +465,9 @@ class CoDETR(BaseDetector):
             # add dummy score_factor
             outs = (*outs, None)
         # TODO Can we change to `get_bboxes` when `onnx_export` fail
-        det_bboxes, det_labels = self.query_head.onnx_export(
-            *outs, img_metas, with_nms=with_nms)
+        # TODO support NMS
+        # det_bboxes, det_labels = self.query_head.onnx_export(
+        #     *outs, img_metas, with_nms=with_nms)
+        det_bboxes, det_labels = self.query_head.onnx_export(*outs, img_metas)
 
         return det_bboxes, det_labels
